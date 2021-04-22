@@ -38,16 +38,10 @@ members = [
 exclude = [
   "build",
   "compiler/rustc_codegen_cranelift",
-  # HACK(eddyb) This hardcodes the fact that our CI uses `/checkout/obj`.
   "obj",
-  # The `x` binary is a thin wrapper that calls `x.py`, which initializes
-  # submodules, before which workspace members cannot be invoked because
-  # not all `Cargo.toml` files are available, so we exclude the `x` binary,
-  # so it can be invoked before the current checkout is set up.
   "src/tools/x",
-  # stdarch has its own Cargo workspace
   "library/stdarch",
-]
+] # stdarch has its own Cargo workspace
 
 [profile.release.package.compiler_builtins]
 # The compiler-builtins crate cannot reference libcore, and it's own CI will
@@ -108,6 +102,8 @@ rustc-workspace-hack = { path = 'src/tools/rustc-workspace-hack' }
 rustc-std-workspace-core = { path = 'library/rustc-std-workspace-core' }
 rustc-std-workspace-alloc = { path = 'library/rustc-std-workspace-alloc' }
 rustc-std-workspace-std = { path = 'library/rustc-std-workspace-std' }
+
+rustc-hash = { git = 'https://github.com/eggyal/rustc-hash', branch = 'derive-clone-rebased' }
 
 [patch."https://github.com/rust-lang/rust-clippy"]
 clippy_lints = { path = "src/tools/clippy/clippy_lints" }
