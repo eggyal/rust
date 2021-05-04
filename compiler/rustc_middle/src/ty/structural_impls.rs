@@ -237,6 +237,7 @@ TrivialTypeFoldableAndLiftImpls! {
     crate::mir::coverage::InjectedExpressionId,
     crate::mir::coverage::InjectedExpressionIndex,
     crate::mir::coverage::MappedExpressionIndex,
+    crate::mir::BasicBlockPath,
     crate::mir::Local,
     crate::mir::Promoted,
     crate::traits::Reveal,

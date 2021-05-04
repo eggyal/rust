@@ -1,5 +1,6 @@
 //! Values computed by queries that use MIR.
 
+use crate::dep_graph::{DepKind, DepNode};
 use crate::mir::{abstract_const, Body, Promoted};
 use crate::ty::{self, Ty, TyCtxt};
 use rustc_data_structures::fx::FxHashMap;
@@ -430,10 +431,22 @@ impl<'tcx> TyCtxt<'tcx> {
 
     #[inline]
     pub fn mir_for_ctfe_opt_const_arg(self, def: ty::WithOptConstParam<DefId>) -> &'tcx Body<'tcx> {
-        if let Some((did, param_did)) = def.as_const_arg() {
-            self.mir_for_ctfe_of_const_arg((did, param_did))
+        let (body, _) = self.mir_for_ctfe_opt_const_arg_with_dep_node(def);
+        body
+    }
+
+    #[inline]
+    pub fn mir_for_ctfe_opt_const_arg_with_dep_node(
+        self,
+        def: ty::WithOptConstParam<DefId>,
+    ) -> (&'tcx Body<'tcx>, DepNode) {
+        if let Some(key) = def.as_const_arg() {
+            (
+                self.mir_for_ctfe_of_const_arg(key),
+                DepNode::construct(self, DepKind::mir_for_ctfe_of_const_arg, &key),
+            )
         } else {
-            self.mir_for_ctfe(def.did)
+            (self.mir_for_ctfe(def.did), DepNode::construct(self, DepKind::mir_for_ctfe, &def.did))
         }
     }
 

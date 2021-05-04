@@ -423,6 +423,44 @@ impl<'tcx> TerminatorKind<'tcx> {
             _ => None,
         }
     }
+
+    pub fn head(&self) -> TerminatorHead<'_> {
+        match self {
+            TerminatorKind::Goto { .. } => TerminatorHead::Goto,
+            TerminatorKind::SwitchInt { discr, switch_ty, .. } => {
+                TerminatorHead::SwitchInt { discr, switch_ty }
+            }
+            TerminatorKind::Resume => TerminatorHead::Resume,
+            TerminatorKind::Abort => TerminatorHead::Abort,
+            TerminatorKind::Return => TerminatorHead::Return,
+            TerminatorKind::Unreachable => TerminatorHead::Unreachable,
+            TerminatorKind::Drop { place, .. } => TerminatorHead::Drop { place: *place },
+            TerminatorKind::DropAndReplace { place, value, .. } => {
+                TerminatorHead::DropAndReplace { place: *place, value }
+            }
+            TerminatorKind::Call { func, args, destination, from_hir_call, fn_span, .. } => {
+                TerminatorHead::Call {
+                    func,
+                    args,
+                    destination: destination.map(|(place, ..)| place),
+                    from_hir_call: *from_hir_call,
+                    fn_span: *fn_span,
+                }
+            }
+            TerminatorKind::Assert { cond, expected, msg, .. } => {
+                TerminatorHead::Assert { cond, expected: *expected, msg }
+            }
+            TerminatorKind::Yield { value, resume_arg, .. } => {
+                TerminatorHead::Yield { value, resume_arg: *resume_arg }
+            }
+            TerminatorKind::GeneratorDrop => TerminatorHead::GeneratorDrop,
+            TerminatorKind::FalseEdge { .. } => TerminatorHead::FalseEdge,
+            TerminatorKind::FalseUnwind { .. } => TerminatorHead::FalseUnwind,
+            TerminatorKind::InlineAsm { template, operands, options, line_spans, .. } => {
+                TerminatorHead::InlineAsm { template, operands, options: *options, line_spans }
+            }
+        }
+    }
 }
 
 impl<'tcx> Debug for TerminatorKind<'tcx> {
@@ -451,14 +489,56 @@ impl<'tcx> Debug for TerminatorKind<'tcx> {
     }
 }
 
-impl<'tcx> TerminatorKind<'tcx> {
-    /// Writes the "head" part of the terminator; that is, its name and the data it uses to pick the
-    /// successor basic block, if any. The only information not included is the list of possible
-    /// successors, which may be rendered differently between the text and the graphviz format.
-    pub fn fmt_head<W: Write>(&self, fmt: &mut W) -> fmt::Result {
-        use self::TerminatorKind::*;
+#[derive(HashStable)]
+pub enum TerminatorHead<'a> {
+    Goto,
+    SwitchInt {
+        discr: &'a Operand<'a>,
+        switch_ty: Ty<'a>,
+    },
+    Resume,
+    Abort,
+    Return,
+    Unreachable,
+    Drop {
+        place: Place<'a>,
+    },
+    DropAndReplace {
+        place: Place<'a>,
+        value: &'a Operand<'a>,
+    },
+    Call {
+        func: &'a Operand<'a>,
+        args: &'a [Operand<'a>],
+        destination: Option<Place<'a>>,
+        from_hir_call: bool,
+        fn_span: Span,
+    },
+    Assert {
+        cond: &'a Operand<'a>,
+        expected: bool,
+        msg: &'a AssertMessage<'a>,
+    },
+    Yield {
+        value: &'a Operand<'a>,
+        resume_arg: Place<'a>,
+    },
+    GeneratorDrop,
+    FalseEdge,
+    FalseUnwind,
+    InlineAsm {
+        template: &'a [InlineAsmTemplatePiece],
+        operands: &'a [InlineAsmOperand<'a>],
+        options: InlineAsmOptions,
+        line_spans: &'a [Span],
+    },
+}
+
+impl Debug for TerminatorHead<'_> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
+        use self::TerminatorHead::*;
         match self {
-            Goto { .. } => write!(fmt, "goto"),
+            Goto => write!(fmt, "goto"),
             SwitchInt { discr, .. } => write!(fmt, "switchInt({:?})", discr),
             Return => write!(fmt, "return"),
             GeneratorDrop => write!(fmt, "generator_drop"),
@@ -471,7 +551,7 @@ impl<'tcx> TerminatorKind<'tcx> {
                 write!(fmt, "replace({:?} <- {:?})", place, value)
             }
             Call { func, args, destination, .. } => {
-                if let Some((destination, _)) = destination {
+                if let Some(destination) = destination {
                     write!(fmt, "{:?} = ", destination)?;
                 }
                 write!(fmt, "{:?}(", func)?;
@@ -492,11 +572,11 @@ impl<'tcx> TerminatorKind<'tcx> {
                 msg.fmt_assert_args(fmt)?;
                 write!(fmt, ")")
             }
-            FalseEdge { .. } => write!(fmt, "falseEdge"),
-            FalseUnwind { .. } => write!(fmt, "falseUnwind"),
-            InlineAsm { template, ref operands, options, .. } => {
+            FalseEdge => write!(fmt, "falseEdge"),
+            FalseUnwind => write!(fmt, "falseUnwind"),
+            InlineAsm { template, operands, options, .. } => {
                 write!(fmt, "asm!(\"{}\"", InlineAsmTemplatePiece::to_string(template))?;
-                for op in operands {
+                for op in *operands {
                     write!(fmt, ", ")?;
                     let print_late = |&late| if late { "late" } else { "" };
                     match op {
@@ -541,6 +621,15 @@ impl<'tcx> TerminatorKind<'tcx> {
                 write!(fmt, ", options({:?}))", options)
             }
         }
+    }
+}
+
+impl<'tcx> TerminatorKind<'tcx> {
+    /// Writes the "head" part of the terminator; that is, its name and the data it uses to pick the
+    /// successor basic block, if any. The only information not included is the list of possible
+    /// successors, which may be rendered differently between the text and the graphviz format.
+    pub fn fmt_head<W: Write>(&self, fmt: &mut W) -> fmt::Result {
+        write!(fmt, "{:?}", self.head())
     }
 
     /// Returns the list of labels for the edges to the successor basic blocks.

@@ -20,9 +20,10 @@ use rustc_target::abi::{Size, VariantIdx};
 
 use polonius_engine::Atom;
 pub use rustc_ast::Mutability;
-use rustc_data_structures::fx::FxHashSet;
+use rustc_data_structures::fx::{FxHashSet, FxHasher};
 use rustc_data_structures::graph::dominators::{dominators, Dominators};
 use rustc_data_structures::graph::{self, GraphSuccessors};
+use rustc_data_structures::unhash::UnhashMap;
 use rustc_index::bit_set::BitMatrix;
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_serialize::{Decodable, Encodable};
@@ -32,6 +33,7 @@ use rustc_target::asm::InlineAsmRegOrRegClass;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Display, Formatter, Write};
+use std::hash::Hasher;
 use std::ops::{ControlFlow, Index, IndexMut};
 use std::slice;
 use std::{iter, mem, option};
@@ -1441,6 +1443,147 @@ impl<O: fmt::Debug> fmt::Debug for AssertKind<O> {
     }
 }
 
+/// A reference to a specific `BasicBlock`, expressed as its normalized path through the CFG from the
+/// relevant `Body`'s start node; the path is the arithmetic coded sequence of each block along the
+/// path as its 0-based index amongst its predecessor's successors.
+///
+/// That is, a path of [1, 3, 0, 4] indicates the block that is reached by:
+///   - taking successor index 1 from the start node B_0 to reach some intermediate block B_1;
+///   - taking successor index 3 from that block B_1 to reach some intermediate block B_2;
+///   - taking successor index 0 from that block B_2 to reach some intermediate block B_3;
+///   - taking successor index 4 from that block B_3 to reach final block B_4.
+///
+/// This path remains stable over any changes to block indexing, such as could happen between sessions
+/// if a new block is inserted or an old one removed.
+#[derive(
+    Clone, Copy, Debug, Encodable, Decodable, Eq, Hash, HashStable, Ord, PartialEq, PartialOrd
+)]
+pub struct BasicBlockPath(u64);
+
+impl BasicBlockPath {
+    pub fn start() -> Self {
+        let hasher = FxHasher::default();
+        BasicBlockPath(hasher.finish())
+    }
+
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, Default, HashStable)]
+pub struct BasicBlockPathResolver {
+    paths: IndexVec<BasicBlock, BasicBlockPath>,
+    blocks: UnhashMap<BasicBlockPath, BasicBlock>,
+}
+
+impl BasicBlockPathResolver {
+    /// Build a `BasicBlockPathResolver` for `body`, by traversing its CFG.
+    pub fn new(body: &Body<'_>) -> Option<Self> {
+        let basic_blocks = body.basic_blocks();
+
+        let mut hashers = IndexVec::from_elem(None, basic_blocks);
+        let mut blocks =
+            UnhashMap::with_capacity_and_hasher(basic_blocks.len(), Default::default());
+        let mut to_visit = Vec::with_capacity(basic_blocks.len());
+
+        let hasher = FxHasher::default();
+        let path = BasicBlockPath(hasher.finish());
+        hashers[START_BLOCK] = Some(hasher);
+        blocks.insert(path, START_BLOCK);
+        to_visit.push(START_BLOCK);
+
+        while let Some(current_block) = to_visit.pop() {
+            for (successor, &child_block) in
+                basic_blocks[current_block].terminator().successors().enumerate()
+            {
+                if hashers[child_block].is_none() {
+                    let parent_hasher = hashers[current_block].as_ref().unwrap();
+
+                    // Work around until https://github.com/rust-lang/rustc-hash/pull/16 lands
+                    // Assumes that `FxHasher` can be safely copied despite not implementing Copy
+                    // (it can in rustc-hash v1.1.0, as it holds only a usize).
+                    let mut child_hasher = unsafe {
+                        let mut hasher = std::mem::MaybeUninit::<FxHasher>::uninit();
+                        hasher.as_mut_ptr().copy_from_nonoverlapping(parent_hasher, 1);
+                        hasher.assume_init()
+                    };
+
+                    // Adding 1 to work around https://github.com/rust-lang/rustc-hash/issues/17
+                    child_hasher.write_usize(successor + 1);
+
+                    use std::collections::hash_map::Entry;
+                    match blocks.entry(BasicBlockPath(child_hasher.finish())) {
+                        Entry::Occupied(_) => {
+                            // hash collision
+                            return None;
+                        }
+                        Entry::Vacant(entry) => {
+                            hashers[child_block] = Some(child_hasher);
+                            entry.insert(child_block);
+                            to_visit.push(child_block);
+                        }
+                    }
+                }
+            }
+        }
+
+        let paths = IndexVec::from_fn_n(
+            |basic_block| BasicBlockPath(hashers[basic_block].as_ref().unwrap().finish()),
+            basic_blocks.len(),
+        );
+
+        Some(BasicBlockPathResolver { paths, blocks })
+    }
+
+    pub fn path_for_block(&self, basic_block: BasicBlock) -> BasicBlockPath {
+        self.paths[basic_block]
+    }
+
+    pub fn block_for_path(&self, path: BasicBlockPath) -> BasicBlock {
+        self.blocks[&path]
+    }
+}
+
+/// A reference to `BasicBlockData`, but whose stable hash expresses the block's successors by their
+/// `BasicBlockPath`s and which therefore remains stable over any changes to block indexing, such as
+/// could happen between sessions if a new block is inserted or an old one removed.
+///
+/// Note that the `HashStable` infrastructure would normally expect this to be handled differently.
+/// In particular, `BasicBlock`s would hash via their `BasicBlockPath`s just as `DefId`s hash via
+/// their `DefPath`s--and then there would be no need for this `StableBasicBlockDataRef` type, as
+/// `BasicBlockData` themselves would provide this level of stability.  However, that would require:
+///
+/// 1. every `BasicBlock` to additionally include context that identifies the `Body` to which it
+///    belongs (e.g. its `InstanceDef`); and
+///
+/// 2. additional computational cost (to calculate the `BasicBlockPaths`) during normal compilation.
+///
+/// Since this level of stability is currently only required for an experimental feature, it does
+/// not warrant such significant changes to a very hot area of the compiler.
+#[derive(Clone, Debug)]
+pub struct StableBasicBlockDataRef<'tcx> {
+    data: &'tcx BasicBlockData<'tcx>,
+    resolver: &'tcx BasicBlockPathResolver,
+}
+
+impl<'tcx> StableBasicBlockDataRef<'tcx> {
+    pub fn new(data: &'tcx BasicBlockData<'tcx>, resolver: &'tcx BasicBlockPathResolver) -> Self {
+        StableBasicBlockDataRef { data, resolver }
+    }
+
+    pub fn data(&self) -> &BasicBlockData<'tcx> {
+        &self.data
+    }
+
+    pub fn successors(&self) -> impl '_ + Iterator<Item = BasicBlockPath> {
+        self.data
+            .terminator()
+            .successors()
+            .map(move |&basic_block| self.resolver.path_for_block(basic_block))
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // Statements
 
@@ -1672,10 +1815,19 @@ impl Debug for Statement<'_> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, TyEncodable, TyDecodable, Hash, HashStable, TypeFoldable)]
+#[derive(Clone, Debug, PartialEq, TyEncodable, TyDecodable, Hash, HashStable)]
 pub struct Coverage {
     pub kind: CoverageKind,
     pub code_region: Option<CodeRegion>,
+}
+
+impl<'tcx> TypeFoldable<'tcx> for Coverage {
+    fn super_fold_with<F: TypeFolder<'tcx>>(self, folder: &mut F) -> Self {
+        Coverage { kind: TypeFoldable::fold_with(self.kind, folder), code_region: self.code_region }
+    }
+    fn super_visit_with<V: TypeVisitor<'tcx>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
+        TypeFoldable::visit_with(&self.kind, visitor)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, TyEncodable, TyDecodable, Hash, HashStable, TypeFoldable)]

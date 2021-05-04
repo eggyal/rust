@@ -194,3 +194,29 @@ impl<'a> HashStable<StableHashingContext<'a>> for crate::middle::privacy::Access
         });
     }
 }
+
+impl<HCX> ToStableHashKey<HCX> for mir::BasicBlockPath {
+    type KeyType = u64;
+    fn to_stable_hash_key(&self, _: &HCX) -> u64 {
+        self.as_u64()
+    }
+}
+
+impl<'a, 'tcx> HashStable<StableHashingContext<'a>> for mir::StableBasicBlockDataRef<'tcx> {
+    fn hash_stable(&self, hcx: &mut StableHashingContext<'a>, hasher: &mut StableHasher) {
+        let mir::BasicBlockData { statements, terminator, is_cleanup } = self.data();
+
+        statements.hash_stable(hcx, hasher);
+        match terminator {
+            None => {}
+            Some(mir::Terminator { source_info, kind }) => {
+                source_info.hash_stable(hcx, hasher);
+                kind.head().hash_stable(hcx, hasher);
+                for successor in self.successors() {
+                    successor.hash_stable(hcx, hasher);
+                }
+            }
+        }
+        is_cleanup.hash_stable(hcx, hasher);
+    }
+}

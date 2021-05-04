@@ -1,6 +1,7 @@
 //! Metadata from source code coverage analysis and instrumentation.
 
 use rustc_macros::HashStable;
+use rustc_middle::mir::BasicBlock;
 use rustc_span::Symbol;
 
 use std::cmp::Ord;
@@ -148,32 +149,27 @@ impl Debug for CoverageKind {
     }
 }
 
-#[derive(
-    Clone,
-    TyEncodable,
-    TyDecodable,
-    Hash,
-    HashStable,
-    TypeFoldable,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord
-)]
+#[derive(Clone, TyEncodable, TyDecodable, Hash, HashStable, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CodeRegion {
     pub file_name: Symbol,
     pub start_line: u32,
     pub start_col: u32,
     pub end_line: u32,
     pub end_col: u32,
+    pub basic_blocks: Vec<BasicBlock>,
 }
 
 impl Debug for CodeRegion {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         write!(
             fmt,
-            "{}:{}:{} - {}:{}",
-            self.file_name, self.start_line, self.start_col, self.end_line, self.end_col
+            "{}:{}:{} - {}:{} (blocks {:?})",
+            self.file_name,
+            self.start_line,
+            self.start_col,
+            self.end_line,
+            self.end_col,
+            self.basic_blocks
         )
     }
 }

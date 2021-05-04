@@ -43,6 +43,7 @@ pub mod dataflow;
 pub mod interpret;
 pub mod monomorphize;
 mod shim;
+mod stable;
 pub mod transform;
 pub mod util;
 
@@ -52,6 +53,7 @@ pub fn provide(providers: &mut Providers) {
     borrow_check::provide(providers);
     const_eval::provide(providers);
     shim::provide(providers);
+    stable::provide(providers);
     transform::provide(providers);
     monomorphize::partitioning::provide(providers);
     monomorphize::polymorphize::provide(providers);

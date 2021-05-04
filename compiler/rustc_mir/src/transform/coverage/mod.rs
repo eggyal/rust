@@ -301,19 +301,28 @@ impl<'a, 'tcx> Instrumentor<'a, 'tcx> {
             };
             graphviz_data.add_bcb_coverage_span_with_counter(bcb, &covspan, &counter_kind);
 
+            let bbs = self.bcb_all_bbs(bcb);
             debug!(
-                "Calling make_code_region(file_name={}, source_file={:?}, span={}, body_span={})",
+                "Calling make_code_region(file_name={}, source_file={:?}, span={}, body_span={}, bbs={:?})",
                 file_name,
                 self.source_file,
                 source_map.span_to_string(span),
-                source_map.span_to_string(body_span)
+                source_map.span_to_string(body_span),
+                bbs,
             );
 
             inject_statement(
                 self.mir_body,
                 counter_kind,
                 self.bcb_leader_bb(bcb),
-                Some(make_code_region(source_map, file_name, &self.source_file, span, body_span)),
+                Some(make_code_region(
+                    source_map,
+                    file_name,
+                    &self.source_file,
+                    span,
+                    body_span,
+                    bbs,
+                )),
             );
         }
     }
@@ -415,6 +424,11 @@ impl<'a, 'tcx> Instrumentor<'a, 'tcx> {
     }
 
     #[inline]
+    fn bcb_all_bbs(&self, bcb: BasicCoverageBlock) -> Vec<BasicBlock> {
+        self.bcb_data(bcb).all_bbs().to_owned()
+    }
+
+    #[inline]
     fn bcb_data(&self, bcb: BasicCoverageBlock) -> &BasicCoverageBlockData {
         &self.basic_coverage_blocks[bcb]
     }
@@ -496,6 +510,7 @@ fn make_code_region(
     source_file: &Lrc<SourceFile>,
     span: Span,
     body_span: Span,
+    basic_blocks: Vec<BasicBlock>,
 ) -> CodeRegion {
     let (start_line, mut start_col) = source_file.lookup_file_pos(span.lo());
     let (end_line, end_col) = if span.hi() == span.lo() {
@@ -519,6 +534,7 @@ fn make_code_region(
         start_col: start_col.to_u32() + 1,
         end_line: end_line as u32,
         end_col: end_col.to_u32() + 1,
+        basic_blocks,
     }
 }
 

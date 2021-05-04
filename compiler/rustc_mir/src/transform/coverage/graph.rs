@@ -337,6 +337,11 @@ impl BasicCoverageBlockData {
     }
 
     #[inline(always)]
+    pub fn all_bbs(&self) -> &[BasicBlock] {
+        &self.basic_blocks[..]
+    }
+
+    #[inline(always)]
     pub fn terminator<'a, 'tcx>(&self, mir_body: &'a mir::Body<'tcx>) -> &'a Terminator<'tcx> {
         &mir_body[self.last_bb()].terminator()
     }

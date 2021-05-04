@@ -862,6 +862,15 @@ rustc_queries! {
         desc { |tcx| "generating MIR shim for `{}`", tcx.def_path_str(key.def_id()) }
     }
 
+    query mir_stable_block_path_resolver(key: ty::InstanceDef<'tcx>) -> Option<&'tcx mir::BasicBlockPathResolver> {
+        desc { |tcx| "generating stable block path resolver for `{}`", tcx.def_path_str(key.def_id()) }
+    }
+
+    query mir_stable_block_ref(key: ty::InstanceBasicBlock<'tcx>) -> Option<mir::StableBasicBlockDataRef<'tcx>> {
+        desc { |tcx| "generating stable block `{}:{:?}`", tcx.def_path_str(key.instance_def.def_id()), key.basic_block_path }
+        // cache_on_disk_if { true }
+    }
+
     /// The `symbol_name` query provides the symbol name for calling a
     /// given instance from the local crate. In particular, it will also
     /// look up the correct symbol name of instances from upstream crates.

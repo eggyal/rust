@@ -19,6 +19,7 @@ pub use assoc::*;
 pub use closure::*;
 pub use generics::*;
 
+use crate::dep_graph::{DepKind, DepNode};
 use crate::hir::exports::ExportMap;
 use crate::ich::StableHashingContext;
 use crate::middle::cstore::CrateStoreDyn;
@@ -61,7 +62,7 @@ pub use self::context::{
     CtxtInterners, DelaySpanBugEmitted, FreeRegionInfo, GeneratorInteriorTypeCause, GlobalCtxt,
     Lift, ResolvedOpaqueTy, TyCtxt, TypeckResults, UserType, UserTypeAnnotationIndex,
 };
-pub use self::instance::{Instance, InstanceDef};
+pub use self::instance::{Instance, InstanceBasicBlock, InstanceDef};
 pub use self::list::List;
 pub use self::sty::BoundRegionKind::*;
 pub use self::sty::RegionKind::*;
@@ -1758,18 +1759,31 @@ impl<'tcx> TyCtxt<'tcx> {
 
     /// Returns the possibly-auto-generated MIR of a `(DefId, Subst)` pair.
     pub fn instance_mir(self, instance: ty::InstanceDef<'tcx>) -> &'tcx Body<'tcx> {
+        let (body, _) = self.instance_mir_with_dep_node(instance);
+        body
+    }
+
+    /// Returns the possibly-auto-generated MIR of a `(DefId, Subst)` pair, together with its `DepNode`.
+    #[inline]
+    pub fn instance_mir_with_dep_node(
+        self,
+        instance: ty::InstanceDef<'tcx>,
+    ) -> (&'tcx Body<'tcx>, DepNode) {
         match instance {
             ty::InstanceDef::Item(def) => match self.def_kind(def.did) {
                 DefKind::Const
                 | DefKind::Static
                 | DefKind::AssocConst
                 | DefKind::Ctor(..)
-                | DefKind::AnonConst => self.mir_for_ctfe_opt_const_arg(def),
+                | DefKind::AnonConst => self.mir_for_ctfe_opt_const_arg_with_dep_node(def),
                 // If the caller wants `mir_for_ctfe` of a function they should not be using
                 // `instance_mir`, so we'll assume const fn also wants the optimized version.
                 _ => {
                     assert_eq!(def.const_param_did, None);
-                    self.optimized_mir(def.did)
+                    (
+                        self.optimized_mir(def.did),
+                        DepNode::construct(self, DepKind::optimized_mir, &def.did),
+                    )
                 }
             },
             ty::InstanceDef::VtableShim(..)
@@ -1779,7 +1793,9 @@ impl<'tcx> TyCtxt<'tcx> {
             | ty::InstanceDef::Virtual(..)
             | ty::InstanceDef::ClosureOnceShim { .. }
             | ty::InstanceDef::DropGlue(..)
-            | ty::InstanceDef::CloneShim(..) => self.mir_shims(instance),
+            | ty::InstanceDef::CloneShim(..) => {
+                (self.mir_shims(instance), DepNode::construct(self, DepKind::mir_shims, &instance))
+            }
         }
     }
 

@@ -414,6 +414,10 @@ impl<K: DepKind> DepGraph<K> {
         &self.data.as_ref().unwrap().previous_work_products
     }
 
+    pub fn previous_index_of(&self, dep_node: &DepNode<K>) -> Option<SerializedDepNodeIndex> {
+        self.data.as_ref().and_then(|data| data.previous.node_to_index_opt(dep_node))
+    }
+
     #[inline(always)]
     pub fn register_dep_node_debug_str<F>(&self, dep_node: DepNode<K>, debug_str_gen: F)
     where

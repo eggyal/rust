@@ -1,4 +1,5 @@
 use crate::middle::codegen_fn_attrs::CodegenFnAttrFlags;
+use crate::mir::BasicBlockPath;
 use crate::ty::print::{FmtPrinter, Printer};
 use crate::ty::subst::{InternalSubsts, Subst};
 use crate::ty::{self, SubstsRef, Ty, TyCtxt, TypeFoldable};
@@ -93,6 +94,14 @@ pub enum InstanceDef<'tcx> {
     ///
     /// The `DefId` is for `Clone::clone`, the `Ty` is the type `T` with the builtin `Clone` impl.
     CloneShim(DefId, Ty<'tcx>),
+}
+
+/// A reference to a specific MIR `BasicBlock`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(TyEncodable, TyDecodable, HashStable)]
+pub struct InstanceBasicBlock<'tcx> {
+    pub instance_def: InstanceDef<'tcx>,
+    pub basic_block_path: BasicBlockPath,
 }
 
 impl<'tcx> Instance<'tcx> {
