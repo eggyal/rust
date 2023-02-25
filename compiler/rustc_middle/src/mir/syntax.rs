@@ -1353,7 +1353,7 @@ pub enum NullOp<'tcx> {
     /// Returns the minimum alignment of a type
     AlignOf,
     /// Returns the offset of a field
-    OffsetOf(#[skip_traversal(because_trivial)] &'tcx List<(VariantIdx, FieldIdx)>),
+    OffsetOf(&'tcx List<(VariantIdx, FieldIdx)>),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

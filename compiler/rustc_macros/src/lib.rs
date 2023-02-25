@@ -80,15 +80,17 @@ decl_derive!(
     /// Folds will produce a value of the same struct or enum variant as the input, with
     /// guaranteed trivial fields unchanged and all potentially non-trivial fields respectively
     /// folded (in definition order) using the `TypeFoldable` implementation for its type. A field
-    /// of type `T` is "potentially non-trivial" if `T` references either a generic type parameter
-    /// or any lifetime that is outlived by a `'tcx` lifetime parameter.
+    /// of type `T` is "potentially non-trivial" if `T` either (i) references a generic type
+    /// parameter, or (ii) both references any lifetime that is outlived by a `'tcx` lifetime
+    /// parameter and the interner does not implement `TriviallyTraverses<T>`.
     ///
-    /// If such a *potentially* non-trivial field is *in fact* trivial (the interner implements
-    /// `TriviallyTraverses<T>`), it can be left unchanged by applying
+    /// If a potentially non-trivial field that references a generic type parameter is in fact
+    /// guaranteed to be trivial (the interner implements `TriviallyTraverses<C>` for all concrete
+    /// instances `C` of the generic field type), it can be left unchanged by applying
     /// `#[skip_traversal(because_trivial)]` to the field definition (or even to a variant
     /// definition if it should apply to all fields therein). This enables the derive macro to be
-    /// used without requiring `TypeFoldable` to be implemented on such (potentially non-trivial but
-    /// in fact trivial) types.
+    /// used without requiring `TypeFoldable` to be implemented on the concrete instances of such
+    /// (potentially non-trivial but in fact trivial) generic types.
     ///
     /// In some rare situations it may be desirable for folders to leave unchanged an item, variant
     /// or field that is *in fact* (i.e. not just potentially) non-trivial: **this is dangerous and
@@ -123,15 +125,17 @@ decl_derive!(
     ///
     /// Each potentially non-trivial field of the struct or enum variant will be visited (in
     /// definition order) using the `TypeVisitable` implementation for its type; guaranteed trivial
-    /// fields will be ignored. A field of type `T` is "potentially non-trivial" if `T` references
-    /// either a generic type parameter or any lifetime that is outlived by a `'tcx` lifetime
-    /// parameter.
+    /// fields will be ignored. A field of type `T` is "potentially non-trivial" if `T` either (i)
+    /// references a generic type parameter, or (ii) both references any lifetime that is outlived
+    /// by a `'tcx` lifetime parameter and the interner does not implement `TriviallyTraverses<T>`.
     ///
-    /// If such a *potentially* non-trivial field is *in fact* trivial (the interner implements
-    /// `TriviallyTraverses<T>`), it can be ignored by applying `#[skip_traversal(because_trivial)]`
-    /// to the field definition (or even to a variant definition if it should apply to all fields
-    /// therein). This enables the derive macro to be used without requiring `TypeVisitable` to be
-    /// implemented on such (potentially non-trivial but in fact trivial) types.
+    /// If such a potentially non-trivial field that references a generic type parameter is in fact
+    /// guaranteed to be trivial (the interner implements `TriviallyTraverses<C>` for all concrete
+    /// instances `C` of the generic field type), it can be ignored by applying
+    /// `#[skip_traversal(because_trivial)]` to the field definition (or even to a variant
+    /// definition if it should apply to all fields therein). This enables the derive macro to be
+    /// used without requiring `TypeVisitable` to be implemented on the concrete instances of such
+    /// (potentially non-trivial but in fact trivial) generic types.
     ///
     /// In some rare situations it may be desirable for visitors to ignore an item, variant or field
     /// that is *in fact* (i.e. not just potentially) non-trivial: **this is dangerous and could

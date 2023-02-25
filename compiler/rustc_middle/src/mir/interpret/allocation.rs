@@ -143,7 +143,7 @@ impl hash::Hash for Allocation {
 /// (`ConstAllocation`) are used quite a bit.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, HashStable, TypeFoldable, TypeVisitable)]
 #[rustc_pass_by_value]
-pub struct ConstAllocation<'tcx>(#[skip_traversal(because_trivial)] pub Interned<'tcx, Allocation>);
+pub struct ConstAllocation<'tcx>(pub Interned<'tcx, Allocation>);
 
 impl<'tcx> fmt::Debug for ConstAllocation<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

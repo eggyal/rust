@@ -31,6 +31,17 @@ impl VisitMut for Normalizer {
         visit_generics_mut(params in syn::Generics);
     }
 
+    fn visit_macro_mut(&mut self, i: &mut syn::Macro) {
+        syn::visit_mut::visit_macro_mut(self, i);
+        if i.path.is_ident("noop_if_trivially_traversable") {
+            let mut expr = i
+                .parse_body()
+                .expect("body of `noop_if_trivially_traversable` macro should be an expression");
+            self.visit_expr_mut(&mut expr);
+            i.tokens = expr.into_token_stream();
+        }
+    }
+
     // For convenience, we also simplify paths by removing absolute crate/module
     // references.
     fn visit_path_mut(&mut self, i: &mut syn::Path) {
@@ -177,7 +188,8 @@ macro_rules! expect {
 }
 
 #[test]
-fn only_potentially_non_trivial_fields_are_constrained_and_folded() {
+fn only_potentially_non_trivial_fields_are_constrained_and_folded_but_non_generic_fields_use_specialisation()
+ {
     expect! {
         {
             struct SomethingInteresting<'a, 'b, 'c, 'tcx: 'b, T>(
@@ -220,15 +232,15 @@ fn only_potentially_non_trivial_fields_are_constrained_and_folded() {
                             __binding_7,
                             __binding_8,
                         ) => { SomethingInteresting(
-                            TypeFoldable::try_fold_with(__binding_0, folder)?,
-                            TypeFoldable::try_fold_with(__binding_1, folder)?,
-                            TypeFoldable::try_fold_with(__binding_2, folder)?,
-                            TypeFoldable::try_fold_with(__binding_3, folder)?,
-                            TypeFoldable::try_fold_with(__binding_4, folder)?,
+                            TypeFoldable::try_fold_with(__binding_0, folder)?, // no need for specialisation
+                            TypeFoldable::try_fold_with(__binding_1, folder)?, // no need for specialisation
+                            noop_if_trivially_traversable!(__binding_2.try_fold_with::< TyCtxt<'tcx> >(folder))?, // uses specialisation
+                            TypeFoldable::try_fold_with(__binding_3, folder)?, // no need for specialisation
+                            TypeFoldable::try_fold_with(__binding_4, folder)?, // no need for specialisation
                             __binding_5, // not folded
                             __binding_6, // not folded
-                            TypeFoldable::try_fold_with(__binding_7, folder)?,
-                            TypeFoldable::try_fold_with(__binding_8, folder)?,
+                            noop_if_trivially_traversable!(__binding_7.try_fold_with::< TyCtxt<'tcx> >(folder))?, // uses specialisation
+                            noop_if_trivially_traversable!(__binding_8.try_fold_with::< TyCtxt<'tcx> >(folder))?, // uses specialisation
                         )}
                     })
                 }
@@ -278,7 +290,7 @@ fn skipping_potentially_non_trivial_type_requires_justification() {
         {
             #[skip_traversal(because_trivial)]
             struct SomethingInteresting<'tcx>;
-        } => "`because_trivial` is only valid on potentially non-trivial variants or fields"
+        } => "`because_trivial` is only valid on variants or fields that reference a generic type parameter"
 
         {
             #[skip_traversal(despite_potential_miscompilation_because = ".")]
@@ -301,25 +313,14 @@ fn skipping_potentially_non_trivial_field_requires_justification() {
                 #[skip_traversal()]
                 Const<'tcx>,
             );
-        } => "Justification must be provided for skipping potentially non-trivial fields"
+        } => "Justification must be provided for skipping potentially non-trivial types"
 
         {
             struct SomethingInteresting<'tcx>(
                 #[skip_traversal(because_trivial)]
                 Const<'tcx>,
             );
-        } => {
-            impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<'tcx>
-            where
-                TyCtxt<'tcx>: TriviallyTraverses<Const<'tcx>> // `because_trivial`
-            {
-                fn try_fold_with<T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut T) -> Result<Self, T::Error> {
-                    Ok(match self {
-                        SomethingInteresting(__binding_0,) => { SomethingInteresting(__binding_0,) } // not folded
-                    })
-                }
-            }
-        }
+        } => "`because_trivial` is only valid on variants or fields that reference a generic type parameter"
 
         {
             struct SomethingInteresting<'tcx>(
@@ -372,7 +373,7 @@ fn skipping_generic_field_requires_justification() {
                 #[skip_traversal()]
                 T,
             );
-        } => "Justification must be provided for skipping potentially non-trivial fields"
+        } => "Justification must be provided for skipping variants or fields that reference a generic type parameter"
 
         {
             struct SomethingInteresting<T>(

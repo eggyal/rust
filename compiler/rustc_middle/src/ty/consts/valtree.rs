@@ -32,7 +32,7 @@ pub enum ValTree<'tcx> {
     /// the fields of the variant.
     ///
     /// ZST types are represented as an empty slice.
-    Branch(#[skip_traversal(because_trivial)] &'tcx [ValTree<'tcx>]),
+    Branch(&'tcx [ValTree<'tcx>]),
 }
 
 impl<'tcx> ValTree<'tcx> {

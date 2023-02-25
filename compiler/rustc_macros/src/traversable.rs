@@ -30,7 +30,7 @@ fn gen_param(suffix: impl ToString, existing: &Generics) -> Ident {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Type {
+pub enum Type {
     /// Describes a type that is not parameterised by the interner, and therefore cannot
     /// be of any interest to traversers.
     Trivial,
@@ -220,13 +220,12 @@ impl WhenToSkip {
                     }
 
                     if meta.path.is_ident("because_trivial") {
-                        return if !IS_TYPE {
+                        return if !IS_TYPE && ty == Generic {
                             debug_assert_ne!(ty, Trivial);
                             *self |= Always(meta.error("").span());
                             Ok(())
                         } else {
-                            Err(meta
-                                .error("`because_trivial` is only valid on potentially non-trivial variants or fields"))
+                            Err(meta.error("`because_trivial` is only valid on variants or fields that reference a generic type parameter"))
                         };
                     }
 
@@ -258,14 +257,14 @@ impl WhenToSkip {
         } else if let Some(attr) = found {
             Err(Error::new_spanned(
                 attr,
-                if IS_TYPE {
+                if IS_TYPE || ty != Generic {
                     "\
                     Justification must be provided for skipping potentially non-trivial types, by specifying\n\
                     `despite_potential_miscompilation_because = \"<reason>\"`\
                 "
                 } else {
                     "\
-                    Justification must be provided for skipping potentially non-trivial fields, by specifying EITHER:\n\
+                    Justification must be provided for skipping variants or fields that reference a generic type parameter, by specifying EITHER:\n\
                     `because_trivial` if concrete instances are in fact trivial (enforced by requiring the type to implement `TriviallyTraversable`); OR\n\
                     `despite_potential_miscompilation_because = \"<reason>\"` in the rare case that a field should always be skipped regardless\
                 "
@@ -392,7 +391,7 @@ pub trait Traversable {
     fn supertraits(interner: &Interner<'_>) -> TokenStream;
 
     /// A (`noop`) traversal of this trait upon the `bind` expression.
-    fn traverse(bind: TokenStream, noop: bool) -> TokenStream;
+    fn traverse(bind: TokenStream, noop: bool, ty: Type, interner: &Interner<'_>) -> TokenStream;
 
     /// A `match` arm for `variant`, where `f` generates the tokens for each binding.
     fn arm(
@@ -415,9 +414,11 @@ impl Traversable for Foldable {
     fn supertraits(interner: &Interner<'_>) -> TokenStream {
         Visitable::traversable(interner)
     }
-    fn traverse(bind: TokenStream, noop: bool) -> TokenStream {
+    fn traverse(bind: TokenStream, noop: bool, ty: Type, interner: &Interner<'_>) -> TokenStream {
         if noop {
             bind
+        } else if ty == Internable {
+            quote! { ::rustc_middle::ty::noop_if_trivially_traversable!(#bind.try_fold_with::<#interner>(folder))? }
         } else {
             quote! { ::rustc_type_ir::fold::TypeFoldable::try_fold_with(#bind, folder)? }
         }
@@ -452,9 +453,11 @@ impl Traversable for Visitable {
     fn supertraits(_: &Interner<'_>) -> TokenStream {
         quote! { ::core::clone::Clone + ::core::fmt::Debug }
     }
-    fn traverse(bind: TokenStream, noop: bool) -> TokenStream {
+    fn traverse(bind: TokenStream, noop: bool, ty: Type, interner: &Interner<'_>) -> TokenStream {
         if noop {
             quote! {}
+        } else if ty == Internable {
+            quote! { ::rustc_middle::ty::noop_if_trivially_traversable!(#bind.visit_with::<#interner>(visitor))?; }
         } else {
             quote! { ::rustc_type_ir::visit::TypeVisitable::visit_with(#bind, visitor)?; }
         }
@@ -523,7 +526,7 @@ pub fn traversable_derive<T: Traversable>(
     let mut when_to_skip = WhenToSkip::default();
     when_to_skip.find::<true>(&ast.attrs, ty)?;
     let body = if when_to_skip.is_skipped() {
-        T::traverse(quote! { self }, true)
+        T::traverse(quote! { self }, true, ty, &interner)
     } else {
         // We add predicates to each generic field type, rather than to our generic type parameters.
         // This results in a "perfect derive" that avoids having to propagate `#[skip_traversal]` annotations
@@ -555,7 +558,7 @@ pub fn traversable_derive<T: Traversable>(
                     skipped_field.is_skipped()
                 };
 
-                Ok(T::traverse(bind.into_token_stream(), is_skipped))
+                Ok(T::traverse(bind.into_token_stream(), is_skipped, field_ty, &interner))
             })
         });
         // the order in which `where` predicates appear in rust source is irrelevant
