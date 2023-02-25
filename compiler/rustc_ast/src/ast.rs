@@ -2149,11 +2149,7 @@ bitflags::bitflags! {
     }
 }
 
-#[derive(Clone, PartialEq, Encodable, Decodable, Debug, Hash, HashStable_Generic, TypeVisitable)]
-#[skip_traversal(but_impl_despite_trivial_because = "
-    Derived traversal of `rustc_middle::mir::TerminatorKind` traverses slice hereof with `'tcx` lifetime; and
-    generic `TypeVisitable` implementation for slices requires element type to implement `TypeVisitable`.
-")]
+#[derive(Clone, PartialEq, Encodable, Decodable, Debug, Hash, HashStable_Generic)]
 pub enum InlineAsmTemplatePiece {
     String(String),
     Placeholder { operand_idx: usize, modifier: Option<char>, span: Span },

@@ -1346,7 +1346,6 @@ pub enum AggregateKind<'tcx> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TyEncodable, TyDecodable, Hash, HashStable)]
-#[derive(TypeFoldable, TypeVisitable)]
 pub enum NullOp<'tcx> {
     /// Returns the size of a value of that type
     SizeOf,

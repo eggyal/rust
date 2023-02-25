@@ -34,8 +34,6 @@ pub use self::ObligationCauseCode::*;
 /// Depending on the stage of compilation, we want projection to be
 /// more or less conservative.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, HashStable, Encodable, Decodable)]
-#[derive(TypeFoldable, TypeVisitable)]
-#[skip_traversal(but_impl_despite_trivial_because = "used in explicit traversals for ty::ParamEnv")]
 pub enum Reveal {
     /// At type-checking time, we refuse to project any associated
     /// type that is marked `default`. Non-`default` ("final") types

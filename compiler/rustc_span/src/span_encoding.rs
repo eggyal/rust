@@ -76,13 +76,7 @@ use rustc_data_structures::fx::FxIndexSet;
 /// using the callback `SPAN_TRACK` to access the query engine.
 ///
 #[derive(Clone, Copy, Eq, PartialEq, Hash, TypeFoldable, TypeVisitable)]
-#[skip_traversal(
-    but_impl_despite_trivial_because = "
-        Derived traversal of `rustc_middle::mir::TerminatorKind` traverses slice hereof with `'tcx` lifetime; and
-        generic `TypeVisitable` implementation for slices requires element type to implement `TypeVisitable`.
-    ",
-    but_impl_despite_trivial_because = "present in traversed tuples"
-)]
+#[skip_traversal(but_impl_despite_trivial_because = "present in traversed tuples")]
 #[rustc_pass_by_value]
 pub struct Span {
     lo_or_index: u32,
