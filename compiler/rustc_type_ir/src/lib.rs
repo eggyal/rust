@@ -26,8 +26,6 @@ pub mod ty_info;
 pub mod ty_kind;
 pub mod visit;
 
-#[macro_use]
-mod macros;
 mod canonical;
 mod const_kind;
 mod debug;

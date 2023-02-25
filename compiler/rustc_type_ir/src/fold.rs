@@ -251,6 +251,12 @@ where
 ///////////////////////////////////////////////////////////////////////////
 // Traversal implementations.
 
+impl<I: Interner> TypeFoldable<I> for () {
+    fn try_fold_with<F: FallibleTypeFolder<I>>(self, _: &mut F) -> Result<(), F::Error> {
+        Ok(())
+    }
+}
+
 impl<I: Interner, T: TypeFoldable<I>, U: TypeFoldable<I>> TypeFoldable<I> for (T, U) {
     fn try_fold_with<F: FallibleTypeFolder<I>>(self, folder: &mut F) -> Result<(T, U), F::Error> {
         Ok((self.0.try_fold_with(folder)?, self.1.try_fold_with(folder)?))

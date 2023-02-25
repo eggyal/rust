@@ -123,6 +123,12 @@ pub trait TypeVisitor<I: Interner>: Sized {
 ///////////////////////////////////////////////////////////////////////////
 // Traversal implementations.
 
+impl<I: Interner> TypeVisitable<I> for () {
+    fn visit_with<V: TypeVisitor<I>>(&self, _: &mut V) -> ControlFlow<V::BreakTy> {
+        ControlFlow::Continue(())
+    }
+}
+
 impl<I: Interner, T: TypeVisitable<I>, U: TypeVisitable<I>> TypeVisitable<I> for (T, U) {
     fn visit_with<V: TypeVisitor<I>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
         self.0.visit_with(visitor)?;
