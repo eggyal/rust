@@ -406,52 +406,23 @@ TrivialLiftImpls! {
      bool,
      usize,
      u64,
+     ::rustc_hir::Mutability,
+     crate::ty::ParamTy,
+     interpret::Scalar,
+     interpret::AllocId,
+     rustc_target::abi::Size,
 }
 
 // For some things about which the type library does not know, or does not
 // provide any traversal implementations, we need to provide a traversal
 // implementation (only for TyCtxt<'_> interners).
 TrivialTypeTraversalImpls! {
-    ::rustc_target::abi::FieldIdx,
-    ::rustc_target::abi::VariantIdx,
-    crate::middle::region::Scope,
-    crate::ty::FloatTy,
-    ::rustc_ast::InlineAsmOptions,
     ::rustc_ast::InlineAsmTemplatePiece,
-    ::rustc_ast::NodeId,
-    ::rustc_span::symbol::Symbol,
-    ::rustc_hir::def::Res,
-    ::rustc_hir::def_id::LocalDefId,
-    ::rustc_hir::HirId,
-    ::rustc_hir::MatchSource,
-    ::rustc_target::asm::InlineAsmRegOrRegClass,
-    crate::mir::coverage::CounterId,
-    crate::mir::coverage::ExpressionId,
     crate::mir::Local,
-    crate::mir::Promoted,
     crate::traits::Reveal,
-    crate::ty::adjustment::AutoBorrowMutability,
-    crate::ty::AdtKind,
     crate::ty::BoundConstness,
-    // Including `BoundRegionKind` is a *bit* dubious, but direct
-    // references to bound region appear in `ty::Error`, and aren't
-    // really meant to be folded. In general, we can only fold a fully
-    // general `Region`.
-    crate::ty::BoundRegionKind,
-    crate::ty::AssocItem,
-    crate::ty::AssocKind,
-    crate::ty::AliasKind,
-    crate::ty::Placeholder<crate::ty::BoundRegion>,
-    crate::ty::Placeholder<crate::ty::BoundTy>,
     crate::ty::Placeholder<ty::BoundVar>,
-    crate::ty::FreeRegion,
-    crate::ty::InferTy,
-    crate::ty::IntVarValue,
-    crate::ty::adjustment::PointerCoercion,
-    crate::ty::RegionVid,
-    crate::ty::Variance,
     ::rustc_span::Span,
-    ::rustc_span::symbol::Ident,
     ::rustc_errors::ErrorGuaranteed,
     ty::BoundVar,
     ty::ValTree<'tcx>,
@@ -462,15 +433,10 @@ TrivialTypeTraversalImpls! {
 // interners).
 TrivialTypeTraversalAndLiftImpls! {
     ::rustc_hir::def_id::DefId,
-    ::rustc_hir::Mutability,
     ::rustc_hir::Unsafety,
     ::rustc_target::spec::abi::Abi,
     crate::ty::ClosureKind,
     crate::ty::ParamConst,
-    crate::ty::ParamTy,
-    interpret::Scalar,
-    interpret::AllocId,
-    rustc_target::abi::Size,
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -811,6 +777,12 @@ impl<'tcx> TypeSuperVisitable<TyCtxt<'tcx>> for ty::Const<'tcx> {
     }
 }
 
+impl<'tcx> TypeVisitable<TyCtxt<'tcx>> for TyAndLayout<'tcx, Ty<'tcx>> {
+    fn visit_with<V: TypeVisitor<TyCtxt<'tcx>>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
+        visitor.visit_ty(self.ty)
+    }
+}
+
 impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for InferConst {
     fn try_fold_with<F: FallibleTypeFolder<TyCtxt<'tcx>>>(
         self,
@@ -826,11 +798,5 @@ impl<'tcx> TypeVisitable<TyCtxt<'tcx>> for InferConst {
         _visitor: &mut V,
     ) -> ControlFlow<V::BreakTy> {
         ControlFlow::Continue(())
-    }
-}
-
-impl<'tcx> TypeVisitable<TyCtxt<'tcx>> for TyAndLayout<'tcx, Ty<'tcx>> {
-    fn visit_with<V: TypeVisitor<TyCtxt<'tcx>>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
-        visitor.visit_ty(self.ty)
     }
 }

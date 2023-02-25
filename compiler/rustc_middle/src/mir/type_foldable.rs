@@ -6,21 +6,7 @@ use super::*;
 use crate::ty;
 
 TrivialTypeTraversalImpls! {
-    BlockTailInfo,
-    MirPhase,
-    SourceInfo,
     FakeReadCause,
-    RetagKind,
-    SourceScope,
-    SourceScopeLocalData,
-    UserTypeAnnotationIndex,
-    BorrowKind,
-    CastKind,
-    hir::Movability,
-    BasicBlock,
-    SwitchTargets,
-    CoroutineKind,
-    CoroutineSavedLocal,
 }
 
 TrivialTypeTraversalImpls! {
