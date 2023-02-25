@@ -394,7 +394,7 @@ pub trait Traversable {
 
 impl Traversable for Foldable {
     fn traversable(interner: &Interner<'_>) -> TokenStream {
-        quote! { ::rustc_middle::ty::fold::TypeFoldable<#interner> }
+        quote! { ::rustc_type_ir::fold::TypeFoldable<#interner> }
     }
     fn supertraits(interner: &Interner<'_>) -> TokenStream {
         Visitable::traversable(interner)
@@ -403,7 +403,7 @@ impl Traversable for Foldable {
         if noop {
             bind
         } else {
-            quote! { ::rustc_middle::ty::fold::TypeFoldable::try_fold_with(#bind, folder)? }
+            quote! { ::rustc_type_ir::fold::TypeFoldable::try_fold_with(#bind, folder)? }
         }
     }
     fn arm(
@@ -419,7 +419,7 @@ impl Traversable for Foldable {
         body: impl ToTokens,
     ) -> TokenStream {
         quote! {
-            fn try_fold_with<#traverser: ::rustc_middle::ty::fold::FallibleTypeFolder<#interner>>(
+            fn try_fold_with<#traverser: ::rustc_type_ir::fold::FallibleTypeFolder<#interner>>(
                 self,
                 folder: &mut #traverser
             ) -> ::core::result::Result<Self, #traverser::Error> {
@@ -431,7 +431,7 @@ impl Traversable for Foldable {
 
 impl Traversable for Visitable {
     fn traversable(interner: &Interner<'_>) -> TokenStream {
-        quote! { ::rustc_middle::ty::visit::TypeVisitable<#interner> }
+        quote! { ::rustc_type_ir::visit::TypeVisitable<#interner> }
     }
     fn supertraits(_: &Interner<'_>) -> TokenStream {
         quote! { ::core::clone::Clone + ::core::fmt::Debug }
@@ -440,7 +440,7 @@ impl Traversable for Visitable {
         if noop {
             quote! {}
         } else {
-            quote! { ::rustc_middle::ty::visit::TypeVisitable::visit_with(#bind, visitor)?; }
+            quote! { ::rustc_type_ir::visit::TypeVisitable::visit_with(#bind, visitor)?; }
         }
     }
     fn arm(
@@ -460,7 +460,7 @@ impl Traversable for Visitable {
         body: impl ToTokens,
     ) -> TokenStream {
         quote! {
-            fn visit_with<#traverser: ::rustc_middle::ty::visit::TypeVisitor<#interner>>(
+            fn visit_with<#traverser: ::rustc_type_ir::visit::TypeVisitor<#interner>>(
                 &self,
                 visitor: &mut #traverser
             ) -> ::core::ops::ControlFlow<#traverser::BreakTy> {
@@ -480,7 +480,7 @@ pub fn traversable_derive<T: Traversable>(
     let interner = Interner::resolve(&ast.generics);
     let traverser = gen_param("T", &ast.generics);
     let traversable = T::traversable(&interner);
-    let trivial = quote! { ::rustc_middle::ty::TriviallyTraversable };
+    let trivial = |ty| parse_quote! { #interner: ::rustc_type_ir::TriviallyTraverses<#ty> };
 
     structure.underscore_const(true);
     structure.add_bounds(synstructure::AddBounds::None);
@@ -545,13 +545,13 @@ pub fn traversable_derive<T: Traversable>(
         // the order in which `where` predicates appear in rust source is irrelevant
         #[allow(rustc::potential_query_instability)]
         for (ty, (when_to_skip, field_ty)) in predicates {
-            let constraint = match when_to_skip {
-                Always(_) => &trivial,
+            let predicate = match when_to_skip {
+                Always(_) => trivial(ty),
                 // we only need to add traversable predicate for generic types
-                Never if field_ty == Generic => &traversable,
+                Never if field_ty == Generic => parse_quote! { #ty: #traversable },
                 _ => continue,
             };
-            structure.add_where_predicate(parse_quote! { #ty: #constraint });
+            structure.add_where_predicate(predicate);
         }
         quote! { match self { #arms } }
     };

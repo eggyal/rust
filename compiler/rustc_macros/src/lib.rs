@@ -83,8 +83,8 @@ decl_derive!(
     /// of type `T` is "potentially non-trivial" if `T` references either a generic type parameter
     /// or any lifetime that is outlived by a `'tcx` lifetime parameter.
     ///
-    /// If such a *potentially* non-trivial field is *in fact* trivial (its type implements the
-    /// `TriviallyTraversable` auto-trait), it can be left unchanged by applying
+    /// If such a *potentially* non-trivial field is *in fact* trivial (the interner implements
+    /// `TriviallyTraverses<T>`), it can be left unchanged by applying
     /// `#[skip_traversal(because_trivial)]` to the field definition (or even to a variant
     /// definition if it should apply to all fields therein). This enables the derive macro to be
     /// used without requiring `TypeFoldable` to be implemented on such (potentially non-trivial but
@@ -128,12 +128,11 @@ decl_derive!(
     /// either a generic type parameter or any lifetime that is outlived by a `'tcx` lifetime
     /// parameter.
     ///
-    /// If such a *potentially* non-trivial field is *in fact* trivial (its type implements the
-    /// `TriviallyTraversable` auto-trait), it can be ignored by applying
-    /// `#[skip_traversal(because_trivial)]` to the field definition (or even to a variant
-    /// definition if it should apply to all fields therein). This enables the derive macro to be
-    /// used without requiring `TypeVisitable` to be implemented on such (potentially non-trivial
-    /// but in fact trivial) types.
+    /// If such a *potentially* non-trivial field is *in fact* trivial (the interner implements
+    /// `TriviallyTraverses<T>`), it can be ignored by applying `#[skip_traversal(because_trivial)]`
+    /// to the field definition (or even to a variant definition if it should apply to all fields
+    /// therein). This enables the derive macro to be used without requiring `TypeVisitable` to be
+    /// implemented on such (potentially non-trivial but in fact trivial) types.
     ///
     /// In some rare situations it may be desirable for visitors to ignore an item, variant or field
     /// that is *in fact* (i.e. not just potentially) non-trivial: **this is dangerous and could

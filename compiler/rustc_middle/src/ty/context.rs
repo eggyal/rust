@@ -67,7 +67,7 @@ use rustc_target::abi::{FieldIdx, Layout, LayoutS, TargetDataLayout, VariantIdx}
 use rustc_target::spec::abi;
 use rustc_type_ir::TyKind::*;
 use rustc_type_ir::WithCachedTypeInfo;
-use rustc_type_ir::{CollectAndApply, Interner, TypeFlags};
+use rustc_type_ir::{CollectAndApply, Interner, TriviallyTraverses, TypeFlags};
 
 use std::any::Any;
 use std::borrow::Borrow;
@@ -143,6 +143,7 @@ impl<'tcx> Interner for TyCtxt<'tcx> {
 /// this trait does not today contain anything of interest to folders or visitors,
 /// a field added or changed in future may cause breakage.
 pub auto trait TriviallyTraversable {}
+impl<T: ?Sized + TriviallyTraversable> TriviallyTraverses<T> for TyCtxt<'_> {}
 
 impl<T> !TriviallyTraversable for Binder<'_, T> {}
 impl !TriviallyTraversable for Ty<'_> {}

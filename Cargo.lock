@@ -4062,6 +4062,7 @@ dependencies = [
  "rustc_serialize",
  "rustc_span",
  "rustc_target",
+ "rustc_type_ir",
  "smallvec",
  "tracing",
 ]
@@ -4632,6 +4633,7 @@ dependencies = [
  "rustc_span",
  "rustc_target",
  "rustc_transmute",
+ "rustc_type_ir",
  "smallvec",
  "tracing",
 ]
@@ -4661,6 +4663,7 @@ dependencies = [
  "rustc_middle",
  "rustc_span",
  "rustc_target",
+ "rustc_type_ir",
  "tracing",
 ]
 

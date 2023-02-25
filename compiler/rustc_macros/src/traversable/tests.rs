@@ -38,18 +38,28 @@ impl VisitMut for Normalizer {
 
         let n = if i.leading_colon.is_some() && i.segments.len() >= 2 {
             let segment = &i.segments[0];
-            if *segment == parse_quote! { rustc_middle } {
-                if i.segments.len() >= 3 && i.segments[1] == parse_quote! { ty } {
-                    let segment = &i.segments[2];
-                    if *segment == parse_quote! { fold } || *segment == parse_quote! { visit } {
-                        3
-                    } else {
-                        2
-                    }
-                } else {
+            if *segment == parse_quote! { rustc_type_ir } {
+                let segment = &i.segments[1];
+                if i.segments.len() > 2 && *segment == parse_quote! { fold }
+                    || *segment == parse_quote! { visit }
+                {
+                    2
+                } else if *segment == parse_quote! { Interner }
+                    || segment.ident == "TriviallyTraverses"
+                    || *segment == parse_quote! { noop_if_trivially_traversable }
+                {
                     1
+                } else {
+                    return;
                 }
-            } else if *segment == parse_quote! { core } {
+            } else if *segment == parse_quote! { rustc_middle } {
+                let segment = &i.segments[1];
+                if i.segments.len() > 2 && *segment == parse_quote! { ty } {
+                    2
+                } else {
+                    return;
+                }
+            } else if i.segments.len() > 2 && *segment == parse_quote! { core } {
                 let segment = &i.segments[1];
                 if *segment == parse_quote! { ops } {
                     2
@@ -301,7 +311,7 @@ fn skipping_potentially_non_trivial_field_requires_justification() {
         } => {
             impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<'tcx>
             where
-                Const<'tcx>: TriviallyTraversable // `because_trivial`
+                TyCtxt<'tcx>: TriviallyTraverses<Const<'tcx>> // `because_trivial`
             {
                 fn try_fold_with<T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut T) -> Result<Self, T::Error> {
                     Ok(match self {
@@ -318,7 +328,7 @@ fn skipping_potentially_non_trivial_field_requires_justification() {
             );
         } => {
             impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<'tcx>
-            // no `Const<'tcx>: TriviallyTraversable` constraint
+            // no `TyCtxt<'tcx>: TriviallyTraverses<Const<'tcx>>` constraint
             {
                 fn try_fold_with<T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut T) -> Result<Self, T::Error> {
                     Ok(match self {
@@ -373,7 +383,7 @@ fn skipping_generic_field_requires_justification() {
             impl<'tcx, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<T>
             where
                 Self: TypeVisitable<TyCtxt<'tcx>>,
-                T: TriviallyTraversable // `because_trivial`
+                TyCtxt<'tcx>: TriviallyTraverses<T> // `because_trivial`
             {
                 fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
                     Ok(match self {
@@ -392,7 +402,7 @@ fn skipping_generic_field_requires_justification() {
             impl<'tcx, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<T>
             where
                 Self: TypeVisitable<TyCtxt<'tcx>>
-                // no `T: TriviallyTraversable` constraint
+                // no `TyCtxt<'tcx>: TriviallyTraverses<T>` constraint
             {
                 fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
                     Ok(match self {
