@@ -1490,6 +1490,7 @@ impl<'tcx> UserTypeProjections {
 ///   determined by finding the type of the `.0` field from `T`.
 #[derive(Clone, Debug, TyEncodable, TyDecodable, Hash, HashStable, PartialEq)]
 #[derive(TypeFoldable, TypeVisitable)]
+#[skip_traversal(but_impl_despite_trivial_because = "present in traversed tuples")]
 pub struct UserTypeProjection {
     pub base: UserTypeAnnotationIndex,
     pub projs: Vec<ProjectionKind>,

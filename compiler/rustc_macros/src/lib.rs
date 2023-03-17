@@ -74,7 +74,7 @@ decl_derive!([TyEncodable] => serialize::type_encodable_derive);
 decl_derive!([MetadataDecodable] => serialize::meta_decodable_derive);
 decl_derive!([MetadataEncodable] => serialize::meta_encodable_derive);
 decl_derive!(
-    [TypeFoldable] =>
+    [TypeFoldable, attributes(skip_traversal)] =>
     /// Derives `TypeFoldable` for the annotated `struct` or `enum` (`union` is not supported).
     ///
     /// Folds will produce a value of the same struct or enum variant as the input, with
@@ -82,6 +82,15 @@ decl_derive!(
     /// folded (in definition order) using the `TypeFoldable` implementation for its type. A field
     /// of type `T` is "potentially non-trivial" if `T` references either a generic type parameter
     /// or any lifetime that is outlived by a `'tcx` lifetime parameter.
+    ///
+    /// Since guaranteed trivial fields are skipped during (derived) folds, it's rarely necessary
+    /// for guaranteed trivial items to implement `TypeFoldable`—and consequently, by default,
+    /// `TypeFoldable` *cannot* be derived on them. However, on occasion it may nevertheless be
+    /// necessary to implement `TypeFoldable` for such guaranteed trivial items *even though the
+    /// resulting fold will necessarily be a noop*; for example, if the type is used in a generic
+    /// context that is constrained to implementors of `TypeFoldable`. In such situations one can
+    /// add a `#[skip_traversal(but_impl_despite_trivial_because = "<reason>"]` attribute to
+    /// override the error and generate a noop fold.
     ///
     /// If the annotated item has a `'tcx` lifetime parameter, then that will be used as the
     /// lifetime for the type context/interner; otherwise the lifetime of the type context/interner
@@ -97,7 +106,7 @@ decl_derive!(
     traversable::traversable_derive::<traversable::Foldable>
 );
 decl_derive!(
-    [TypeVisitable] =>
+    [TypeVisitable, attributes(skip_traversal)] =>
     /// Derives `TypeVisitable` for the annotated `struct` or `enum` (`union` is not supported).
     ///
     /// Each potentially non-trivial field of the struct or enum variant will be visited (in
@@ -105,6 +114,15 @@ decl_derive!(
     /// fields will be ignored. A field of type `T` is "potentially non-trivial" if `T` references
     /// either a generic type parameter or any lifetime that is outlived by a `'tcx` lifetime
     /// parameter.
+    ///
+    /// Since guaranteed trivial fields are skipped during (derived) visits, it's rarely necessary
+    /// for guaranteed trivial items to implement `TypeVisitable`—and consequently, by default,
+    /// `TypeVisitable` *cannot* be derived on them. However, on occasion it may nevertheless be
+    /// necessary to implement `TypeVisitable` for such guaranteed trivial items *even though the
+    /// resulting visit will necessarily be a noop*; for example, if the type is used in a generic
+    /// context that is constrained to implementors of `TypeVisitable`. In such situations one can
+    /// add a `#[skip_traversal(but_impl_despite_trivial_because = "<reason>"]` attribute to
+    /// override the error and generate a noop visit.
     ///
     /// If the annotated item has a `'tcx` lifetime parameter, then that will be used as the
     /// lifetime for the type context/interner; otherwise the lifetime of the type context/interner

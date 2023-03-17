@@ -1,4 +1,4 @@
-use super::{parse_quote, traversable_derive, Foldable, ToTokens};
+use super::{parse_quote, traversable_derive, visit, Foldable, ToTokens, Traversable};
 use syn::visit_mut::VisitMut;
 
 /// A folder that normalizes syn types for comparison in tests.
@@ -72,84 +72,209 @@ impl VisitMut for Normalizer {
     }
 }
 
+#[derive(Default, Debug)]
+struct Errors(Vec<String>);
+
+impl Errors {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn contains(&self, message: &str) -> bool {
+        self.0.iter().any(|error| error.starts_with(message))
+    }
+}
+
+impl<E: ToString> From<E> for Errors {
+    fn from(err: E) -> Self {
+        Self(vec![err.to_string()])
+    }
+}
+
+impl visit::Visit<'_> for Errors {
+    fn visit_macro(&mut self, i: &syn::Macro) {
+        if i.path == parse_quote! { ::core::compile_error } {
+            self.0.push(
+                i.parse_body::<syn::LitStr>()
+                    .expect("expected compile_error macro to be invoked with a string literal")
+                    .value(),
+            );
+        } else {
+            syn::visit::visit_macro(self, i)
+        }
+    }
+}
+
+fn result<T: Traversable>(input: syn::DeriveInput) -> Result<syn::ItemImpl, Errors> {
+    traversable_derive::<T>(synstructure::Structure::new(&input))
+        .and_then(syn::parse2)
+        .map_err(Into::into)
+        .and_then(|result| {
+            let mut errors = Errors::default();
+            visit::Visit::visit_item_const(&mut errors, &result);
+            errors
+                .is_empty()
+                .then(|| {
+                    let syn::Expr::Block(syn::ExprBlock {
+                        block: syn::Block { stmts, .. }, ..
+                    }) = *result.expr
+                    else {
+                        panic!("expected const expr to be a block")
+                    };
+                    assert_eq!(stmts.len(), 1, "expected const expr to contain a single statement");
+                    let syn::Stmt::Item(syn::Item::Impl(mut item_impl)) =
+                        stmts.into_iter().next().unwrap()
+                    else {
+                        panic!("expected statement in const expr to be an impl")
+                    };
+
+                    Normalizer.visit_item_impl_mut(&mut item_impl);
+                    item_impl
+                })
+                .ok_or(errors)
+        })
+}
+
+fn expect_success<T: Traversable>(input: syn::DeriveInput, expected: syn::ItemImpl) {
+    let result = result::<T>(input);
+    assert!(
+        result.as_ref().is_ok_and(|actual| *actual == expected),
+        "EXPECTED: {:?}\nACTUAL:   {:?}",
+        Ok::<_, Errors>(expected.into_token_stream().to_string()),
+        result.map(|success| success.into_token_stream().to_string()),
+    );
+}
+
+fn expect_failure<T: Traversable>(input: syn::DeriveInput, expected: &str) {
+    let result = result::<T>(input);
+    assert!(
+        result.as_ref().is_err_and(|errors| errors.contains(expected)),
+        "EXPECTED: Err(\"{expected}...\")\nACTUAL:   {:?}",
+        result.map(|success| success.into_token_stream().to_string()),
+    );
+}
+
+macro_rules! expect {
+    ({$($input:tt)*} => {$($output:tt)*} $($rest:tt)*) => {
+        expect_success::<Foldable>(parse_quote! { $($input)* }, parse_quote! { $($output)* });
+        expect! { $($rest)* }
+    };
+    ({$($input:tt)*} => $msg:literal $($rest:tt)*) => {
+        expect_failure::<Foldable>(parse_quote! { $($input)* }, $msg);
+        expect! { $($rest)* }
+    };
+    () => {};
+}
+
 #[test]
 fn only_potentially_non_trivial_fields_are_constrained_and_folded() {
-    let input = parse_quote! {
-        struct SomethingInteresting<'a, 'b, 'c, 'tcx: 'b, T>(
-            T,
-            T::Assoc,
-            Const<'tcx>,
-            Complex<'tcx, T>,
-            Generic<T>,
-            Trivial,
-            TrivialGeneric<'a, Foo>,
-            NotTrivial<'b>,
-            NotTrivial<'c>,
-        ) where 'tcx: 'c;
-    };
-
-    let expected = parse_quote! {
-        impl<'a, 'b, 'c, 'tcx: 'b, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<'a, 'b, 'c, 'tcx, T>
-        where
-            'tcx: 'c,
-            Complex<'tcx, T>: TypeFoldable<TyCtxt<'tcx>>,
-            Generic<T>: TypeFoldable<TyCtxt<'tcx>>,
-            Self: TypeVisitable<TyCtxt<'tcx>>,
-            T: TypeFoldable<TyCtxt<'tcx>>,
-            T::Assoc: TypeFoldable<TyCtxt<'tcx>>
-            // the following constraints are NOT required, because the fields are not generic:
-            //     Const<'tcx>: TypeFoldable<TyCtxt<'tcx>>
-            //     Trivial: TypeFoldable<TyCtxt<'tcx>>
-            //     TrivialGeneric<'a, Foo>: TypeFoldable<TyCtxt<'tcx>>
-            //     NotTrivial<'b>: TypeFoldable<TyCtxt<'tcx>>
-            //     NotTrivial<'c>: TypeFoldable<TyCtxt<'tcx>>
+    expect! {
         {
-            fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
-                Ok(match self {
-                    SomethingInteresting (
-                        __binding_0,
-                        __binding_1,
-                        __binding_2,
-                        __binding_3,
-                        __binding_4,
-                        __binding_5,
-                        __binding_6,
-                        __binding_7,
-                        __binding_8,
-                    ) => { SomethingInteresting(
-                        TypeFoldable::try_fold_with(__binding_0, folder)?,
-                        TypeFoldable::try_fold_with(__binding_1, folder)?,
-                        TypeFoldable::try_fold_with(__binding_2, folder)?,
-                        TypeFoldable::try_fold_with(__binding_3, folder)?,
-                        TypeFoldable::try_fold_with(__binding_4, folder)?,
-                        __binding_5, // not folded
-                        __binding_6, // not folded
-                        TypeFoldable::try_fold_with(__binding_7, folder)?,
-                        TypeFoldable::try_fold_with(__binding_8, folder)?,
-                    )}
-                })
+            struct SomethingInteresting<'a, 'b, 'c, 'tcx: 'b, T>(
+                T,
+                T::Assoc,
+                Const<'tcx>,
+                Complex<'tcx, T>,
+                Generic<T>,
+                Trivial,
+                TrivialGeneric<'a, Foo>,
+                NotTrivial<'b>,
+                NotTrivial<'c>,
+            ) where 'tcx: 'c;
+        } => {
+            impl<'a, 'b, 'c, 'tcx: 'b, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<'a, 'b, 'c, 'tcx, T>
+            where
+                'tcx: 'c,
+                Complex<'tcx, T>: TypeFoldable<TyCtxt<'tcx>>,
+                Generic<T>: TypeFoldable<TyCtxt<'tcx>>,
+                Self: TypeVisitable<TyCtxt<'tcx>>,
+                T: TypeFoldable<TyCtxt<'tcx>>,
+                T::Assoc: TypeFoldable<TyCtxt<'tcx>>
+                // the following constraints are NOT required, because the fields are not generic:
+                //     Const<'tcx>: TypeFoldable<TyCtxt<'tcx>>
+                //     Trivial: TypeFoldable<TyCtxt<'tcx>>
+                //     TrivialGeneric<'a, Foo>: TypeFoldable<TyCtxt<'tcx>>
+                //     NotTrivial<'b>: TypeFoldable<TyCtxt<'tcx>>
+                //     NotTrivial<'c>: TypeFoldable<TyCtxt<'tcx>>
+            {
+                fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
+                    Ok(match self {
+                        SomethingInteresting (
+                            __binding_0,
+                            __binding_1,
+                            __binding_2,
+                            __binding_3,
+                            __binding_4,
+                            __binding_5,
+                            __binding_6,
+                            __binding_7,
+                            __binding_8,
+                        ) => { SomethingInteresting(
+                            TypeFoldable::try_fold_with(__binding_0, folder)?,
+                            TypeFoldable::try_fold_with(__binding_1, folder)?,
+                            TypeFoldable::try_fold_with(__binding_2, folder)?,
+                            TypeFoldable::try_fold_with(__binding_3, folder)?,
+                            TypeFoldable::try_fold_with(__binding_4, folder)?,
+                            __binding_5, // not folded
+                            __binding_6, // not folded
+                            TypeFoldable::try_fold_with(__binding_7, folder)?,
+                            TypeFoldable::try_fold_with(__binding_8, folder)?,
+                        )}
+                    })
+                }
             }
         }
-    };
+    }
+}
 
-    let result = syn::parse2::<syn::ItemConst>(traversable_derive::<Foldable>(
-        synstructure::Structure::new(&input),
-    ))
-    .expect("expected compiled code to parse");
-    let syn::Expr::Block(syn::ExprBlock { block: syn::Block { stmts, .. }, .. }) = *result.expr
-    else {
-        panic!("expected const expr to be a block")
-    };
-    assert_eq!(stmts.len(), 1, "expected const expr to contain a single statement");
-    let syn::Stmt::Item(syn::Item::Impl(mut actual)) = stmts.into_iter().next().unwrap() else {
-        panic!("expected statement in const expr to be an impl")
-    };
-    Normalizer.visit_item_impl_mut(&mut actual);
+#[test]
+fn skipping_trivial_type_requires_justification() {
+    expect! {
+        {
+            struct NothingInteresting<'a>;
+        } => "Traversal of guaranteed trivial types are no-ops by default"
 
-    assert!(
-        actual == expected,
-        "EXPECTED: {}\nACTUAL:   {}",
-        expected.to_token_stream(),
-        actual.to_token_stream()
-    );
+        {
+            #[skip_traversal()]
+            struct NothingInteresting<'a>;
+        } => "Traversal of guaranteed trivial types are no-ops by default"
+
+        {
+            #[skip_traversal(but_impl_despite_trivial_because = ".")]
+            struct NothingInteresting<'a>;
+        } => {
+            impl<'a, 'tcx> TypeFoldable<TyCtxt<'tcx>> for NothingInteresting<'a> {
+                fn try_fold_with<T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut T) -> Result<Self, T::Error> {
+                    Ok(self) // no attempt to fold
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cannot_skip_interesting_types() {
+    expect! {
+        {
+            #[skip_traversal()]
+            struct SomethingInteresting<'tcx>;
+        } => "potentially non-trivial types cannot be skipped"
+
+        {
+            #[skip_traversal(but_impl_despite_trivial_because = ".")]
+            struct SomethingInteresting<'tcx>;
+        } => "potentially non-trivial types cannot be skipped"
+    }
+}
+
+#[test]
+fn cannot_skip_fields() {
+    expect! {
+        {
+            struct SomethingInteresting<T>(
+                #[skip_traversal()]
+                T,
+            );
+        } => "#[skip_traversal] attributes are only valid on items"
+    }
 }
