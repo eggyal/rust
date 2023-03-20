@@ -9,6 +9,7 @@ use crate::ty::print::{with_no_trimmed_paths, FmtPrinter, Printer};
 use crate::ty::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitor};
 use crate::ty::{self, AliasTy, InferConst, Lift, Term, TermKind, Ty, TyCtxt};
 use rustc_hir::def::Namespace;
+use rustc_span::source_map::Spanned;
 use rustc_type_ir::{ConstKind, DebugWithInfcx, InferCtxtLike, WithInfcx};
 
 use std::fmt::{self, Debug};
@@ -440,6 +441,13 @@ impl<'a, 'tcx> Lift<'tcx> for Term<'a> {
             }
             .pack(),
         )
+    }
+}
+
+impl<'tcx, T: Lift<'tcx>> Lift<'tcx> for Spanned<T> {
+    type Lifted = Spanned<T::Lifted>;
+    fn lift_to_tcx(self, tcx: TyCtxt<'tcx>) -> Option<Self::Lifted> {
+        Some(Spanned { node: tcx.lift(self.node)?, span: self.span })
     }
 }
 
