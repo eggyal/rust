@@ -288,7 +288,7 @@ pub enum StatementKind<'tcx> {
     /// When executed at runtime this is a nop.
     ///
     /// Disallowed after drop elaboration.
-    FakeRead(Box<(FakeReadCause, Place<'tcx>)>),
+    FakeRead(Box<FakeReadCauseAndPlace<'tcx>>),
 
     /// Write the discriminant for a variant to the enum Place.
     ///
@@ -459,10 +459,12 @@ pub enum RetagKind {
     Default,
 }
 
-/// The `FakeReadCause` describes the type of pattern why a FakeRead statement exists.
 #[derive(Copy, Clone, TyEncodable, TyDecodable, Debug, Hash, HashStable, PartialEq)]
 #[derive(TypeFoldable, TypeVisitable)]
-#[skip_traversal(but_impl_despite_trivial_because = "present in traversed tuples")]
+pub struct FakeReadCauseAndPlace<'tcx>(pub FakeReadCause, pub Place<'tcx>);
+
+/// The `FakeReadCause` describes the type of pattern why a FakeRead statement exists.
+#[derive(Copy, Clone, TyEncodable, TyDecodable, Debug, Hash, HashStable, PartialEq)]
 pub enum FakeReadCause {
     /// Inject a fake read of the borrowed input at the end of each guards
     /// code.
