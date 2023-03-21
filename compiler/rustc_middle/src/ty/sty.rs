@@ -1445,7 +1445,10 @@ impl<'tcx> ParamTy {
 }
 
 #[derive(Copy, Clone, Hash, TyEncodable, TyDecodable, Eq, PartialEq, Ord, PartialOrd)]
-#[derive(HashStable)]
+#[derive(HashStable, TypeFoldable, TypeVisitable)]
+#[skip_traversal(
+    but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`"
+)]
 pub struct ParamConst {
     pub index: u32,
     pub name: Symbol,
@@ -1618,7 +1621,10 @@ impl Atom for RegionVid {
 }
 
 rustc_index::newtype_index! {
-    #[derive(HashStable)]
+    #[derive(HashStable, TypeFoldable, TypeVisitable)]
+    #[skip_traversal(
+        but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`",
+    )]
     #[debug_format = "{}"]
     pub struct BoundVar {}
 }

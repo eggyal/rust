@@ -2248,7 +2248,11 @@ where
 /// The `()` field is necessary: it is non-`pub`, which means values of this
 /// type cannot be constructed outside of this crate.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(HashStable_Generic)]
+#[derive(HashStable_Generic, TypeFoldable, TypeVisitable)]
+#[skip_traversal(
+    but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`",
+    but_impl_despite_trivial_because = "`rustc_hir_analysis::check::enter_wf_checking_ctxt` explicitly traverses `Option<ErrorGuaranteed>`"
+)]
 pub struct ErrorGuaranteed(());
 
 impl ErrorGuaranteed {

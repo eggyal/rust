@@ -3948,6 +3948,7 @@ dependencies = [
  "rustc_serialize",
  "rustc_span",
  "rustc_target",
+ "rustc_type_ir",
  "smallvec",
  "tracing",
 ]
@@ -4563,6 +4564,7 @@ dependencies = [
  "rustc_index",
  "rustc_macros",
  "rustc_serialize",
+ "rustc_type_ir",
  "scoped-tls",
  "sha1",
  "sha2",
@@ -4602,6 +4604,7 @@ dependencies = [
  "rustc_macros",
  "rustc_serialize",
  "rustc_span",
+ "rustc_type_ir",
  "serde_json",
  "tracing",
 ]

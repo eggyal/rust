@@ -6,12 +6,10 @@ use super::*;
 use crate::ty;
 
 TrivialTypeTraversalImpls! {
-    FakeReadCause,
-}
-
-TrivialTypeTraversalImpls! {
-    ConstValue<'tcx>,
-    NullOp<'tcx>,
+    for<'tcx> {
+        ConstValue<'tcx>,
+        NullOp<'tcx>,
+    }
 }
 
 impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for &'tcx [InlineAsmTemplatePiece] {

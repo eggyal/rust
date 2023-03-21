@@ -461,6 +461,8 @@ pub enum RetagKind {
 
 /// The `FakeReadCause` describes the type of pattern why a FakeRead statement exists.
 #[derive(Copy, Clone, TyEncodable, TyDecodable, Debug, Hash, HashStable, PartialEq)]
+#[derive(TypeFoldable, TypeVisitable)]
+#[skip_traversal(but_impl_despite_trivial_because = "present in traversed tuples")]
 pub enum FakeReadCause {
     /// Inject a fake read of the borrowed input at the end of each guards
     /// code.
@@ -1344,13 +1346,14 @@ pub enum AggregateKind<'tcx> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TyEncodable, TyDecodable, Hash, HashStable)]
+#[derive(TypeFoldable, TypeVisitable)]
 pub enum NullOp<'tcx> {
     /// Returns the size of a value of that type
     SizeOf,
     /// Returns the minimum alignment of a type
     AlignOf,
     /// Returns the offset of a field
-    OffsetOf(&'tcx List<(VariantIdx, FieldIdx)>),
+    OffsetOf(#[skip_traversal(because_trivial)] &'tcx List<(VariantIdx, FieldIdx)>),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

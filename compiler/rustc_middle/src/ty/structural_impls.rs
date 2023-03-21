@@ -9,7 +9,6 @@ use crate::ty::print::{with_no_trimmed_paths, FmtPrinter, Printer};
 use crate::ty::visit::{TypeSuperVisitable, TypeVisitable, TypeVisitor};
 use crate::ty::{self, AliasTy, InferConst, Lift, Term, TermKind, Ty, TyCtxt};
 use rustc_hir::def::Namespace;
-use rustc_target::abi::TyAndLayout;
 use rustc_type_ir::{ConstKind, DebugWithInfcx, InferCtxtLike, WithInfcx};
 
 use std::fmt::{self, Debug};
@@ -406,7 +405,12 @@ TrivialLiftImpls! {
      bool,
      usize,
      u64,
+     ::rustc_hir::def_id::DefId,
      ::rustc_hir::Mutability,
+     ::rustc_hir::Unsafety,
+     ::rustc_target::spec::abi::Abi,
+     crate::ty::ClosureKind,
+     crate::ty::ParamConst,
      crate::ty::ParamTy,
      interpret::Scalar,
      interpret::AllocId,
@@ -417,25 +421,9 @@ TrivialLiftImpls! {
 // provide any traversal implementations, we need to provide a traversal
 // implementation (only for TyCtxt<'_> interners).
 TrivialTypeTraversalImpls! {
-    ::rustc_ast::InlineAsmTemplatePiece,
-    crate::traits::Reveal,
-    crate::ty::BoundConstness,
-    crate::ty::Placeholder<ty::BoundVar>,
-    ::rustc_span::Span,
-    ::rustc_errors::ErrorGuaranteed,
-    ty::BoundVar,
-    ty::ValTree<'tcx>,
-}
-// For some things about which the type library does not know, or does not
-// provide any traversal implementations, we need to provide a traversal
-// implementation and a lift implementation (the former only for TyCtxt<'_>
-// interners).
-TrivialTypeTraversalAndLiftImpls! {
-    ::rustc_hir::def_id::DefId,
-    ::rustc_hir::Unsafety,
-    ::rustc_target::spec::abi::Abi,
-    crate::ty::ClosureKind,
-    crate::ty::ParamConst,
+    for<'tcx> {
+        ty::ValTree<'tcx>,
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -773,29 +761,5 @@ impl<'tcx> TypeSuperVisitable<TyCtxt<'tcx>> for ty::Const<'tcx> {
             ConstKind::Error(e) => e.visit_with(visitor),
             ConstKind::Expr(e) => e.visit_with(visitor),
         }
-    }
-}
-
-impl<'tcx> TypeVisitable<TyCtxt<'tcx>> for TyAndLayout<'tcx, Ty<'tcx>> {
-    fn visit_with<V: TypeVisitor<TyCtxt<'tcx>>>(&self, visitor: &mut V) -> ControlFlow<V::BreakTy> {
-        visitor.visit_ty(self.ty)
-    }
-}
-
-impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for InferConst {
-    fn try_fold_with<F: FallibleTypeFolder<TyCtxt<'tcx>>>(
-        self,
-        _folder: &mut F,
-    ) -> Result<Self, F::Error> {
-        Ok(self)
-    }
-}
-
-impl<'tcx> TypeVisitable<TyCtxt<'tcx>> for InferConst {
-    fn visit_with<V: TypeVisitor<TyCtxt<'tcx>>>(
-        &self,
-        _visitor: &mut V,
-    ) -> ControlFlow<V::BreakTy> {
-        ControlFlow::Continue(())
     }
 }

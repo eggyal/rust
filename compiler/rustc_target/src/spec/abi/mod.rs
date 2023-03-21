@@ -8,7 +8,10 @@ use rustc_span::{Span, Symbol};
 mod tests;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
-#[derive(HashStable_Generic, Encodable, Decodable)]
+#[derive(HashStable_Generic, Encodable, Decodable, TypeFoldable, TypeVisitable)]
+#[skip_traversal(
+    but_impl_despite_trivial_because = "`Abi` impls `Relate`, which is a subtrait of `TypeFoldable`."
+)]
 pub enum Abi {
     // Some of the ABIs come first because every time we add a new ABI, we have to re-bless all the
     // hashing tests. These are used in many places, so giving them stable values reduces test

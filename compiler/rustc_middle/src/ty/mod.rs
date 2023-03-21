@@ -305,6 +305,10 @@ pub enum Visibility<Id = LocalDefId> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, HashStable, TyEncodable, TyDecodable)]
+#[derive(TypeFoldable, TypeVisitable)]
+#[skip_traversal(
+    but_impl_despite_trivial_because = "`BoundConstness` impls `Relate`, which is a subtrait of `TypeFoldable`."
+)]
 pub enum BoundConstness {
     /// `T: Trait`
     NotConst,
@@ -1513,7 +1517,7 @@ impl<'tcx> OpaqueHiddenType<'tcx> {
 /// regions/types/consts within the same universe simply have an unknown relationship to one
 /// another.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[derive(HashStable, TyEncodable, TyDecodable)]
+#[derive(HashStable, TyEncodable, TyDecodable, TypeFoldable, TypeVisitable)]
 pub struct Placeholder<T> {
     pub universe: UniverseIndex,
     pub bound: T,
