@@ -105,13 +105,12 @@ decl_derive!(
     /// add a `#[skip_traversal(but_impl_despite_trivial_because = "<reason>"]` attribute to
     /// override the error and generate a noop fold.
     ///
-    /// If the annotated item has a `'tcx` lifetime parameter, then that will be used as the
-    /// lifetime for the type context/interner; otherwise the lifetime of the type context/interner
-    /// will be unrelated to the annotated type. It therefore matters how any lifetime parameters of
-    /// the annotated type are named. For example, deriving `TypeFoldable` for both `Foo<'a>` and
-    /// `Bar<'tcx>` will respectively produce:
+    /// The derived implementation will use `TyCtxt<'tcx>` as the interner iff the annotated item
+    /// has a `'tcx` lifetime parameter; otherwise it will be generic over all interners. It
+    /// therefore matters how any lifetime parameters of the annotated type are named. For example,
+    /// deriving `TypeFoldable` for both `Foo<'a>` and `Bar<'tcx>` will respectively produce:
     ///
-    /// `impl<'a, 'tcx> TypeFoldable<TyCtxt<'tcx>> for Foo<'a>`
+    /// `impl<'a, I: Interner> TypeFoldable<I> for Foo<'a>`
     ///
     /// and
     ///
@@ -149,13 +148,12 @@ decl_derive!(
     /// add a `#[skip_traversal(but_impl_despite_trivial_because = "<reason>"]` attribute to
     /// override the error and generate a noop visit.
     ///
-    /// If the annotated item has a `'tcx` lifetime parameter, then that will be used as the
-    /// lifetime for the type context/interner; otherwise the lifetime of the type context/interner
-    /// will be unrelated to the annotated type. It therefore matters how any lifetime parameters of
-    /// the annotated type are named. For example, deriving `TypeVisitable` for both `Foo<'a>` and
-    /// `Bar<'tcx>` will respectively produce:
+    /// The derived implementation will use `TyCtxt<'tcx>` as the interner iff the annotated item
+    /// has a `'tcx` lifetime parameter; otherwise it will be generic over all interners. It
+    /// therefore matters how any lifetime parameters of the annotated type are named. For example,
+    /// deriving `TypeVisitable` for both `Foo<'a>` and `Bar<'tcx>` will respectively produce:
     ///
-    /// `impl<'a, 'tcx> TypeVisitable<TyCtxt<'tcx>> for Foo<'a>`
+    /// `impl<'a, I: Interner> TypeVisitable<I> for Foo<'a>`
     ///
     /// and
     ///

@@ -253,8 +253,8 @@ fn skipping_trivial_type_requires_justification() {
             #[skip_traversal(but_impl_despite_trivial_because = ".")]
             struct NothingInteresting<'a>;
         } => {
-            impl<'a, 'tcx> TypeFoldable<TyCtxt<'tcx>> for NothingInteresting<'a> {
-                fn try_fold_with<T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut T) -> Result<Self, T::Error> {
+            impl<'a, I: Interner> TypeFoldable<I> for NothingInteresting<'a> {
+                fn try_fold_with<T: FallibleTypeFolder<I>>(self, folder: &mut T) -> Result<Self, T::Error> {
                     Ok(self) // no attempt to fold
                 }
             }
@@ -352,11 +352,11 @@ fn skipping_generic_type_requires_justification() {
             #[skip_traversal(despite_potential_miscompilation_because = ".")]
             struct SomethingInteresting<T>;
         } => {
-            impl<'tcx, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<T>
+            impl<I: Interner, T> TypeFoldable<I> for SomethingInteresting<T>
             where
-                Self: TypeVisitable<TyCtxt<'tcx>>
+                Self: TypeVisitable<I>
             {
-                fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
+                fn try_fold_with<_T: FallibleTypeFolder<I>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
                     Ok(self) // no attempt to fold fields
                 }
             }
@@ -380,12 +380,12 @@ fn skipping_generic_field_requires_justification() {
                 T,
             );
         } => {
-            impl<'tcx, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<T>
+            impl<I: Interner, T> TypeFoldable<I> for SomethingInteresting<T>
             where
-                Self: TypeVisitable<TyCtxt<'tcx>>,
-                TyCtxt<'tcx>: TriviallyTraverses<T> // `because_trivial`
+                I: TriviallyTraverses<T>, // `because_trivial`
+                Self: TypeVisitable<I>
             {
-                fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
+                fn try_fold_with<_T: FallibleTypeFolder<I>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
                     Ok(match self {
                         SomethingInteresting(__binding_0,) => { SomethingInteresting(__binding_0,) } // not folded
                     })
@@ -399,12 +399,12 @@ fn skipping_generic_field_requires_justification() {
                 T,
             );
         } => {
-            impl<'tcx, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<T>
+            impl<I: Interner, T> TypeFoldable<I> for SomethingInteresting<T>
             where
-                Self: TypeVisitable<TyCtxt<'tcx>>
+                Self: TypeVisitable<I>
                 // no `TyCtxt<'tcx>: TriviallyTraverses<T>` constraint
             {
-                fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
+                fn try_fold_with<_T: FallibleTypeFolder<I>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
                     Ok(match self {
                         SomethingInteresting(__binding_0,) => { SomethingInteresting(__binding_0,) } // not folded
                     })

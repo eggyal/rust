@@ -277,17 +277,28 @@ impl WhenToSkip {
     }
 }
 
-pub struct Interner<'a> {
-    /// Valid lifetimes of the `TyCtxt`; the first is always the `'tcx` lifetime,
-    /// and the remainder are others that are bounded by it. If empty, the derive
-    /// input was not parameterised by `'tcx` and the `TyCtxt` in the generated
-    /// implementation should use a `'tcx` parameter that is unrelated to the input.
-    lifetimes: SmallVec<[&'a Lifetime; 1]>,
+pub enum Interner<'a> {
+    /// `rustc_middle`'s `TyCtxt` interner
+    Middle {
+        /// Valid lifetimes of the `TyCtxt`; the first is always the `'tcx` lifetime,
+        /// and the remainder are others that are bounded by it.
+        lifetimes: SmallVec<[&'a Lifetime; 1]>,
+    },
+
+    /// A generic interner
+    Generic {
+        /// The type parameter that represents this interner
+        type_param: Ident,
+    },
 }
 
 impl<'a> Interner<'a> {
     /// Return the interner for an input with the given `generics`.
-    fn resolve(generics: &'a Generics) -> Self {
+    ///
+    /// If `generics` includes a `'tcx` lifetime parameter, then `Middle` will be returned;
+    /// otherwise our derived implementation will be generic over a new type parameter that
+    /// ends with `suffix`.
+    fn resolve(suffix: impl ToString, generics: &'a Generics) -> Self {
         let mut lifetimes = SmallVec::new();
         let tcx = parse_quote! { 'tcx };
 
@@ -314,11 +325,15 @@ impl<'a> Interner<'a> {
             }
         }
 
-        Self { lifetimes }
+        if !lifetimes.is_empty() {
+            Self::Middle { lifetimes }
+        } else {
+            Self::Generic { type_param: gen_param(suffix, generics) }
+        }
     }
 
-    /// We consider a type to be internable if it references either a generic type parameter
-    /// or an internable lifetime.
+    /// We consider a type to be internable if it references either a generic type parameter or,
+    /// if the interner is `TyCtxt<'tcx>`, an internable lifetime.
     fn type_of<'b>(
         &self,
         referenced_ty_params: &[&Ident],
@@ -341,14 +356,11 @@ impl<'a> Interner<'a> {
 
         if !referenced_ty_params.is_empty() {
             Generic
-        } else if !self.lifetimes.is_empty()
-            && fields.into_iter().any(|field| {
-                let mut info =
-                    Info { internable_lifetimes: &self.lifetimes, can_reference_interner: false };
-                info.visit_type(&field.ty);
-                info.can_reference_interner
-            })
-        {
+        } else if let Interner::Middle { lifetimes } = self && fields.into_iter().any(|field| {
+            let mut info = Info { internable_lifetimes: lifetimes, can_reference_interner: false };
+            info.visit_type(&field.ty);
+            info.can_reference_interner
+        }) {
             Internable
         } else {
             Trivial
@@ -358,9 +370,13 @@ impl<'a> Interner<'a> {
 
 impl ToTokens for Interner<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let default = &parse_quote! { 'tcx };
-        let lt = self.lifetimes.first().unwrap_or(&default);
-        tokens.extend(quote! { ::rustc_middle::ty::TyCtxt<#lt> });
+        match self {
+            Self::Middle { lifetimes } => {
+                let lt = lifetimes[0];
+                tokens.extend(quote! { ::rustc_middle::ty::TyCtxt<#lt> });
+            }
+            Self::Generic { type_param } => type_param.to_tokens(tokens),
+        }
     }
 }
 
@@ -477,7 +493,7 @@ pub fn traversable_derive<T: Traversable>(
     let ast = structure.ast();
     SkipTraversalValidator::validate(ast)?;
 
-    let interner = Interner::resolve(&ast.generics);
+    let interner = Interner::resolve("I", &ast.generics);
     let traverser = gen_param("T", &ast.generics);
     let traversable = T::traversable(&interner);
     let trivial = |ty| parse_quote! { #interner: ::rustc_type_ir::TriviallyTraverses<#ty> };
@@ -486,8 +502,8 @@ pub fn traversable_derive<T: Traversable>(
     structure.add_bounds(synstructure::AddBounds::None);
     structure.bind_with(|_| synstructure::BindStyle::Move);
 
-    let not_generic = if interner.lifetimes.is_empty() {
-        structure.add_impl_generic(parse_quote! { 'tcx });
+    let not_generic = if let Interner::Generic { type_param } = &interner {
+        structure.add_impl_generic(parse_quote! { #type_param: ::rustc_type_ir::Interner });
         Trivial
     } else {
         Internable
