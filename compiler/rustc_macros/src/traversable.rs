@@ -2,7 +2,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use smallvec::SmallVec;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{hash_map::Entry, HashMap, VecDeque},
     mem,
 };
 use syn::{
@@ -10,7 +10,7 @@ use syn::{
     parse_quote,
     spanned::Spanned,
     visit::{self, Visit},
-    Attribute, DeriveInput, Field, Generics, Lifetime, LitStr,
+    Attribute, DeriveInput, Field, Generics, Lifetime, LitStr, Variant,
 };
 
 use Type::*;
@@ -62,6 +62,37 @@ impl Visit<'_> for SkipTraversalValidator {
         self.visit_data(&i.data);
     }
 
+    // ported from visit::visit_field, but at valid location when visiting attributes
+    fn visit_field(&mut self, i: &Field) {
+        self.at_valid_location = true;
+        for it in &i.attrs {
+            self.visit_attribute(it);
+        }
+        self.at_valid_location = false;
+        self.visit_visibility(&i.vis);
+        self.visit_field_mutability(&i.mutability);
+        if let Some(it) = &i.ident {
+            self.visit_ident(it);
+        }
+        //skip!(i.colon_token);
+        self.visit_type(&i.ty);
+    }
+
+    // ported from visit::visit_variant, but at valid location when visiting attributes
+    fn visit_variant(&mut self, i: &Variant) {
+        self.at_valid_location = true;
+        for it in &i.attrs {
+            self.visit_attribute(it);
+        }
+        self.at_valid_location = false;
+        self.visit_ident(&i.ident);
+        self.visit_fields(&i.fields);
+        if let Some(it) = &i.discriminant {
+            // skip!((it).0);
+            self.visit_expr(&(it).1);
+        }
+    }
+
     fn visit_attribute(&mut self, i: &Attribute) {
         let at_valid_location = mem::replace(&mut self.at_valid_location, false);
         if !at_valid_location && i.path().is_ident("skip_traversal") {
@@ -76,10 +107,12 @@ impl SkipTraversalValidator {
     fn validate(derive_input: &DeriveInput) -> Result<(), Error> {
         let mut validator = Self::default();
         validator.visit_derive_input(derive_input);
-        let mut errors = validator
-            .invalid
-            .into_iter()
-            .map(|span| Error::new(span, "#[skip_traversal] attributes are only valid on items"));
+        let mut errors = validator.invalid.into_iter().map(|span| {
+            Error::new(
+                span,
+                "#[skip_traversal] attributes are only valid on items, variants and fields",
+            )
+        });
         if let Some(mut error) = errors.next() {
             error.extend(errors);
             Err(error)
@@ -89,48 +122,100 @@ impl SkipTraversalValidator {
     }
 }
 
-fn is_skipped(attrs: &[Attribute], ty: Type) -> Result<bool, Error> {
-    let mut skipped = false;
+#[derive(Clone, Copy, Default)]
+struct Skipped(Option<Span>);
 
-    for attr in attrs {
-        if attr.path().is_ident("skip_traversal") {
-            if ty != Trivial {
-                return Err(Error::new_spanned(
-                    attr,
-                    "potentially non-trivial types cannot be skipped",
-                ));
-            }
+impl Skipped {
+    fn is_skipped(&self) -> bool {
+        self.0.is_some()
+    }
 
-            attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("but_impl_despite_trivial_because") {
-                    return if ty == Trivial {
-                        if !meta.value()?.parse::<LitStr>()?.value().trim().is_empty() {
-                            skipped = true;
-                            Ok(())
-                        } else {
-                            Err(meta.error("skip reason must be a non-empty string"))
-                        }
-                    } else {
-                        Err(meta.error("`but_impl_despite_trivial_because` is only valid on guaranteed trivial types"))
-                    };
-                }
-
-                Err(meta.error("unsupported skip reason"))
-            })?;
+    fn check_for_conflicts(self, other: Self, ty: &syn::Type) -> Result<(), Error> {
+        if let Some(span) = self.0.xor(other.0) {
+            Err(Error::new(
+                span,
+                format!(
+                    "\
+                This annotation only makes sense if all fields of type `{0}` are annotated identically.\n\
+                In particular, the derived impl will only be applicable when `{0}: TriviallyTraversable` and therefore all traversals of `{0}` will be no-ops;\n\
+                accordingly it makes no sense for other fields of type `{0}` to omit `#[skip_traversal]`.\
+            ",
+                    ty.to_token_stream(),
+                ),
+            ))
+        } else {
+            Ok(())
         }
     }
 
-    if !skipped && ty == Trivial {
-        Err(Error::new(
-            Span::call_site(),
-            "\
-            Traversal of guaranteed trivial types are no-ops by default, so explicitly deriving the traversable traits for them is rarely necessary.\n\
-            If the need has arisen to due the appearance of this type in an anonymous tuple, consider replacing that tuple with a named struct;\n\
-            otherwise add `#[skip_traversal(but_impl_despite_trivial_because = \"<reason for implementation>\")]` to this type.\
-        ",
-        ))
-    } else {
-        Ok(skipped)
+    fn find<const IS_TYPE: bool>(&mut self, attrs: &[Attribute], ty: Type) -> Result<(), Error> {
+        let mut found = None;
+        for attr in attrs {
+            if attr.path().is_ident("skip_traversal") {
+                if IS_TYPE && ty != Trivial {
+                    return Err(Error::new_spanned(
+                        attr,
+                        "potentially non-trivial types cannot be skipped",
+                    ));
+                }
+                if !IS_TYPE && ty == Trivial {
+                    return Err(Error::new_spanned(
+                        attr,
+                        "guaranteed trivial fields are always skipped, so this attribute is superfluous",
+                    ));
+                }
+
+                attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("but_impl_despite_trivial_because") {
+                        return if IS_TYPE {
+                            debug_assert_eq!(ty, Trivial);
+                            if !meta.value()?.parse::<LitStr>()?.value().trim().is_empty() {
+                                self.0 = Some(meta.error("").span());
+                                Ok(())
+                            } else {
+                                Err(meta.error("skip reason must be a non-empty string"))
+                            }
+                        } else {
+                            Err(meta.error("`but_impl_despite_trivial_because` is only valid on guaranteed trivial types"))
+                        };
+                    }
+
+                    if meta.path.is_ident("because_trivial") {
+                        return if !IS_TYPE {
+                            debug_assert_ne!(ty, Trivial);
+                            self.0 = Some(meta.error("").span());
+                            Ok(())
+                        } else {
+                            Err(meta
+                                .error("`because_trivial` is only valid on potentially non-trivial variants or fields"))
+                        };
+                    }
+
+                    Err(meta.error("unsupported skip reason"))
+                })?;
+                found = Some(attr);
+            }
+        }
+
+        if self.is_skipped() {
+            Ok(())
+        } else if IS_TYPE && ty == Trivial {
+            Err(Error::new(
+                Span::call_site(),
+                "\
+                Traversal of guaranteed trivial types are no-ops by default, so explicitly deriving the traversable traits for them is rarely necessary.\n\
+                If the need has arisen to due the appearance of this type in an anonymous tuple, consider replacing that tuple with a named struct;\n\
+                otherwise add `#[skip_traversal(but_impl_despite_trivial_because = \"<reason for implementation>\")]` to this type.\
+            ",
+            ))
+        } else if !IS_TYPE && let Some(attr) = found {
+            Err(Error::new_spanned(attr, "\
+                Potentially non-trivial fields can only be skipped if they are in fact trivial (i.e. they implement `TriviallyTraversable`),\n\
+                which is indicated by specifying `because_trivial`.\
+            "))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -238,7 +323,7 @@ pub trait Traversable {
     /// A `match` arm for `variant`, where `f` generates the tokens for each binding.
     fn arm(
         variant: &synstructure::VariantInfo<'_>,
-        f: impl FnMut(&synstructure::BindingInfo<'_>) -> TokenStream,
+        f: impl FnMut(&synstructure::BindingInfo<'_>) -> Result<TokenStream, Error>,
     ) -> TokenStream;
 
     /// The body of an implementation given the `interner`, `traverser` and match expression `body`.
@@ -265,10 +350,10 @@ impl Traversable for Foldable {
     }
     fn arm(
         variant: &synstructure::VariantInfo<'_>,
-        mut f: impl FnMut(&synstructure::BindingInfo<'_>) -> TokenStream,
+        mut f: impl FnMut(&synstructure::BindingInfo<'_>) -> Result<TokenStream, Error>,
     ) -> TokenStream {
         let bindings = variant.bindings();
-        variant.construct(|_, index| f(&bindings[index]))
+        variant.construct(|_, index| f(&bindings[index]).unwrap_or_else(Error::into_compile_error))
     }
     fn impl_body(
         interner: Interner<'_>,
@@ -302,9 +387,14 @@ impl Traversable for Visitable {
     }
     fn arm(
         variant: &synstructure::VariantInfo<'_>,
-        f: impl FnMut(&synstructure::BindingInfo<'_>) -> TokenStream,
+        f: impl FnMut(&synstructure::BindingInfo<'_>) -> Result<TokenStream, Error>,
     ) -> TokenStream {
-        variant.bindings().iter().map(f).collect()
+        variant
+            .bindings()
+            .iter()
+            .map(f)
+            .collect::<Result<_, _>>()
+            .unwrap_or_else(Error::into_compile_error)
     }
     fn impl_body(
         interner: Interner<'_>,
@@ -332,6 +422,7 @@ pub fn traversable_derive<T: Traversable>(
     let interner = Interner::resolve(&ast.generics);
     let traverser = gen_param("T", &ast.generics);
     let traversable = T::traversable(&interner);
+    let trivial = quote! { ::rustc_middle::ty::TriviallyTraversable };
 
     structure.underscore_const(true);
     structure.add_bounds(synstructure::AddBounds::None);
@@ -355,29 +446,56 @@ pub fn traversable_derive<T: Traversable>(
         not_generic
     };
 
-    let body = if is_skipped(&ast.attrs, ty)? {
+    let mut skipped_item = Skipped::default();
+    skipped_item.find::<true>(&ast.attrs, ty)?;
+    let body = if skipped_item.is_skipped() {
         T::traverse(quote! { self }, true)
     } else {
         // We add predicates to each generic field type, rather than to our generic type parameters.
         // This results in a "perfect derive" that avoids having to propagate `#[skip_traversal]` annotations
         // into wrapping types, but it can result in trait solver cycles if any type parameters are involved
         // in recursive type definitions; fortunately that is not the case (yet).
-        let mut predicates = HashSet::new();
+        let mut predicates = HashMap::<_, (Skipped, _)>::new();
         let arms = structure.each_variant(|variant| {
+            let variant_ty =
+                interner.type_of(&variant.referenced_ty_params(), variant.ast().fields);
+            let mut skipped_variant = Skipped::default();
+            if let Err(error) = skipped_variant.find::<false>(variant.ast().attrs, variant_ty) {
+                return error.into_compile_error();
+            }
             T::arm(variant, |bind| {
                 let ast = bind.ast();
                 let field_ty = interner.type_of(&bind.referenced_ty_params(), [ast]);
-                // we only need to add traversable predicate for generic types
-                if field_ty == Generic {
-                    predicates.insert(ast.ty.clone());
-                }
-                T::traverse(bind.into_token_stream(), field_ty == Trivial)
+                let mut skipped_field = skipped_variant;
+                skipped_field.find::<false>(&ast.attrs, field_ty)?;
+
+                let is_skipped = field_ty == Trivial || {
+                    match predicates.entry(ast.ty.clone()) {
+                        Entry::Occupied(existing) => {
+                            existing.get().0.check_for_conflicts(skipped_field, &ast.ty)?
+                        }
+                        Entry::Vacant(slot) => {
+                            slot.insert((skipped_field, field_ty));
+                        }
+                    }
+                    skipped_field.is_skipped()
+                };
+
+                Ok(T::traverse(bind.into_token_stream(), is_skipped))
             })
         });
         // the order in which `where` predicates appear in rust source is irrelevant
         #[allow(rustc::potential_query_instability)]
-        for ty in predicates {
-            structure.add_where_predicate(parse_quote! { #ty: #traversable });
+        for (ty, (skipped, field_ty)) in predicates {
+            let constraint = if skipped.is_skipped() {
+                &trivial
+            } else if field_ty == Generic {
+                // we only need to add traversable predicate for generic types
+                &traversable
+            } else {
+                continue;
+            };
+            structure.add_where_predicate(parse_quote! { #ty: #constraint });
         }
         quote! { match self { #arms } }
     };

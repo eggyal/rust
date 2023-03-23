@@ -253,7 +253,7 @@ fn skipping_trivial_type_requires_justification() {
 }
 
 #[test]
-fn cannot_skip_interesting_types() {
+fn cannot_skip_potentially_non_trivial_type() {
     expect! {
         {
             #[skip_traversal()]
@@ -268,13 +268,78 @@ fn cannot_skip_interesting_types() {
 }
 
 #[test]
-fn cannot_skip_fields() {
+fn skipping_potentially_non_trivial_field_requires_justification() {
+    expect! {
+        {
+            struct SomethingInteresting<'tcx>(
+                #[skip_traversal()]
+                Const<'tcx>,
+            );
+        } => "Potentially non-trivial fields can only be skipped if they are in fact trivial"
+
+        {
+            struct SomethingInteresting<'tcx>(
+                #[skip_traversal(because_trivial)]
+                Const<'tcx>,
+            );
+        } => {
+            impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<'tcx>
+            where
+                Const<'tcx>: TriviallyTraversable // `because_trivial`
+            {
+                fn try_fold_with<T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut T) -> Result<Self, T::Error> {
+                    Ok(match self {
+                        SomethingInteresting(__binding_0,) => { SomethingInteresting(__binding_0,) } // not folded
+                    })
+                }
+            }
+        }
+
+        {
+            struct SomethingInteresting<'tcx>(
+                #[skip_traversal(because_trivial)]
+                Const<'tcx>,
+                Const<'tcx>,
+            );
+        } => "This annotation only makes sense if all fields of type `Const < 'tcx >` are annotated identically"
+    }
+}
+
+#[test]
+fn skipping_generic_field_requires_justification() {
     expect! {
         {
             struct SomethingInteresting<T>(
                 #[skip_traversal()]
                 T,
             );
-        } => "#[skip_traversal] attributes are only valid on items"
+        } => "Potentially non-trivial fields can only be skipped if they are in fact trivial"
+
+        {
+            struct SomethingInteresting<T>(
+                #[skip_traversal(because_trivial)]
+                T,
+            );
+        } => {
+            impl<'tcx, T> TypeFoldable<TyCtxt<'tcx>> for SomethingInteresting<T>
+            where
+                Self: TypeVisitable<TyCtxt<'tcx>>,
+                T: TriviallyTraversable // `because_trivial`
+            {
+                fn try_fold_with<_T: FallibleTypeFolder<TyCtxt<'tcx>>>(self, folder: &mut _T) -> Result<Self, _T::Error> {
+                    Ok(match self {
+                        SomethingInteresting(__binding_0,) => { SomethingInteresting(__binding_0,) } // not folded
+                    })
+                }
+            }
+        }
+
+        {
+            struct SomethingInteresting<T>(
+                #[skip_traversal(because_trivial)]
+                T,
+                T,
+            );
+        } => "This annotation only makes sense if all fields of type `T` are annotated identically"
     }
 }

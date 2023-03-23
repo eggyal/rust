@@ -83,6 +83,13 @@ decl_derive!(
     /// of type `T` is "potentially non-trivial" if `T` references either a generic type parameter
     /// or any lifetime that is outlived by a `'tcx` lifetime parameter.
     ///
+    /// If such a *potentially* non-trivial field is *in fact* trivial (its type implements the
+    /// `TriviallyTraversable` auto-trait), it can be left unchanged by applying
+    /// `#[skip_traversal(because_trivial)]` to the field definition (or even to a variant
+    /// definition if it should apply to all fields therein). This enables the derive macro to be
+    /// used without requiring `TypeFoldable` to be implemented on such (potentially non-trivial but
+    /// in fact trivial) types.
+    ///
     /// Since guaranteed trivial fields are skipped during (derived) folds, it's rarely necessary
     /// for guaranteed trivial items to implement `TypeFoldable`—and consequently, by default,
     /// `TypeFoldable` *cannot* be derived on them. However, on occasion it may nevertheless be
@@ -114,6 +121,13 @@ decl_derive!(
     /// fields will be ignored. A field of type `T` is "potentially non-trivial" if `T` references
     /// either a generic type parameter or any lifetime that is outlived by a `'tcx` lifetime
     /// parameter.
+    ///
+    /// If such a *potentially* non-trivial field is *in fact* trivial (its type implements the
+    /// `TriviallyTraversable` auto-trait), it can be ignored by applying
+    /// `#[skip_traversal(because_trivial)]` to the field definition (or even to a variant
+    /// definition if it should apply to all fields therein). This enables the derive macro to be
+    /// used without requiring `TypeVisitable` to be implemented on such (potentially non-trivial
+    /// but in fact trivial) types.
     ///
     /// Since guaranteed trivial fields are skipped during (derived) visits, it's rarely necessary
     /// for guaranteed trivial items to implement `TypeVisitable`—and consequently, by default,
