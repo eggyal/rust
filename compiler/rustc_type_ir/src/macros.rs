@@ -42,6 +42,4 @@ macro_rules! TrivialTypeTraversalImpls {
 
 TrivialTypeTraversalImpls! {
     (),
-    crate::AliasRelationDirection,
-    crate::UniverseIndex,
 }
