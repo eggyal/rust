@@ -722,18 +722,7 @@ impl<'tcx> TypeSuperFoldable<TyCtxt<'tcx>> for ty::Const<'tcx> {
         folder: &mut F,
     ) -> Result<Self, F::Error> {
         let ty = self.ty().try_fold_with(folder)?;
-        let kind = match self.kind() {
-            ConstKind::Param(p) => ConstKind::Param(p.try_fold_with(folder)?),
-            ConstKind::Infer(i) => ConstKind::Infer(i.try_fold_with(folder)?),
-            ConstKind::Bound(d, b) => {
-                ConstKind::Bound(d.try_fold_with(folder)?, b.try_fold_with(folder)?)
-            }
-            ConstKind::Placeholder(p) => ConstKind::Placeholder(p.try_fold_with(folder)?),
-            ConstKind::Unevaluated(uv) => ConstKind::Unevaluated(uv.try_fold_with(folder)?),
-            ConstKind::Value(v) => ConstKind::Value(v.try_fold_with(folder)?),
-            ConstKind::Error(e) => ConstKind::Error(e.try_fold_with(folder)?),
-            ConstKind::Expr(e) => ConstKind::Expr(e.try_fold_with(folder)?),
-        };
+        let kind = self.kind().try_fold_with(folder)?;
         if ty != self.ty() || kind != self.kind() {
             Ok(folder.interner().mk_ct_from_kind(kind, ty))
         } else {
@@ -748,18 +737,6 @@ impl<'tcx> TypeSuperVisitable<TyCtxt<'tcx>> for ty::Const<'tcx> {
         visitor: &mut V,
     ) -> ControlFlow<V::BreakTy> {
         self.ty().visit_with(visitor)?;
-        match self.kind() {
-            ConstKind::Param(p) => p.visit_with(visitor),
-            ConstKind::Infer(i) => i.visit_with(visitor),
-            ConstKind::Bound(d, b) => {
-                d.visit_with(visitor)?;
-                b.visit_with(visitor)
-            }
-            ConstKind::Placeholder(p) => p.visit_with(visitor),
-            ConstKind::Unevaluated(uv) => uv.visit_with(visitor),
-            ConstKind::Value(v) => v.visit_with(visitor),
-            ConstKind::Error(e) => e.visit_with(visitor),
-            ConstKind::Expr(e) => e.visit_with(visitor),
-        }
+        self.kind().visit_with(visitor)
     }
 }

@@ -2250,7 +2250,7 @@ where
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(HashStable_Generic, TypeFoldable, TypeVisitable)]
 #[skip_traversal(
-    but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`"
+    but_impl_despite_trivial_because = "traversed generically in `rustc_type_ir::ConstKind<TyCtxt>`"
 )]
 pub struct ErrorGuaranteed(());
 

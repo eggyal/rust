@@ -82,7 +82,7 @@ static_assert_size!(super::ConstKind<'_>, 32);
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, TyEncodable, TyDecodable, Hash)]
 #[derive(TypeFoldable, TypeVisitable)]
 #[skip_traversal(
-    but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`"
+    but_impl_despite_trivial_because = "traversed generically in `rustc_type_ir::ConstKind<TyCtxt>`"
 )]
 pub enum InferConst {
     /// Infer the value of the const.
