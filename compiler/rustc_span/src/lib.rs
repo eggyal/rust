@@ -2250,8 +2250,7 @@ where
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(HashStable_Generic, TypeFoldable, TypeVisitable)]
 #[skip_traversal(
-    but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`",
-    but_impl_despite_trivial_because = "`rustc_hir_analysis::check::enter_wf_checking_ctxt` explicitly traverses `Option<ErrorGuaranteed>`"
+    but_impl_despite_trivial_because = "explicit traversal of `rustc_middle::ty::Const<'tcx>`"
 )]
 pub struct ErrorGuaranteed(());
 
