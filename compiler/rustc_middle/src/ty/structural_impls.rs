@@ -418,7 +418,6 @@ TrivialLiftImpls! {
 // implementation (only for TyCtxt<'_> interners).
 TrivialTypeTraversalImpls! {
     ::rustc_ast::InlineAsmTemplatePiece,
-    crate::mir::Local,
     crate::traits::Reveal,
     crate::ty::BoundConstness,
     crate::ty::Placeholder<ty::BoundVar>,
