@@ -90,6 +90,12 @@ decl_derive!(
     /// used without requiring `TypeFoldable` to be implemented on such (potentially non-trivial but
     /// in fact trivial) types.
     ///
+    /// In some rare situations it may be desirable for folders to leave unchanged an item, variant
+    /// or field that is *in fact* (i.e. not just potentially) non-trivial: **this is dangerous and
+    /// could lead to miscompilation if user expectations are not met!** Nevertheless, such can be
+    /// achieved via a `#[skip_traversal(despite_potential_miscompilation_because = "<reason>"]`
+    /// attribute.
+    ///
     /// Since guaranteed trivial fields are skipped during (derived) folds, it's rarely necessary
     /// for guaranteed trivial items to implement `TypeFoldable`—and consequently, by default,
     /// `TypeFoldable` *cannot* be derived on them. However, on occasion it may nevertheless be
@@ -128,6 +134,12 @@ decl_derive!(
     /// definition if it should apply to all fields therein). This enables the derive macro to be
     /// used without requiring `TypeVisitable` to be implemented on such (potentially non-trivial
     /// but in fact trivial) types.
+    ///
+    /// In some rare situations it may be desirable for visitors to ignore an item, variant or field
+    /// that is *in fact* (i.e. not just potentially) non-trivial: **this is dangerous and could
+    /// lead to miscompilation if user expectations are not met!** Nevertheless, such can be
+    /// achieved via a `#[skip_traversal(despite_potential_miscompilation_because = "<reason>"]`
+    /// attribute.
     ///
     /// Since guaranteed trivial fields are skipped during (derived) visits, it's rarely necessary
     /// for guaranteed trivial items to implement `TypeVisitable`—and consequently, by default,

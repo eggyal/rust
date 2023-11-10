@@ -6,6 +6,7 @@ use std::{
     mem,
 };
 use syn::{
+    meta::ParseNestedMeta,
     parse::Error,
     parse_quote,
     spanned::Spanned,
@@ -122,16 +123,55 @@ impl SkipTraversalValidator {
     }
 }
 
-#[derive(Clone, Copy, Default)]
-struct Skipped(Option<Span>);
+#[derive(Clone, Copy, Debug)]
+enum WhenToSkip {
+    /// No skip_traversal annotation requires the annotated item to be skipped
+    Never,
 
-impl Skipped {
+    /// A skip_traversal annotation requires the annotated item to be skipped, with its type
+    /// constrained to TriviallyTraversable
+    Always(Span),
+
+    /// A `despite_potential_miscompilation_because` annotation is present, thus requiring the
+    /// annotated item to be forcibly skipped without its type being constrained to
+    /// TriviallyTraversable
+    Forced,
+}
+use WhenToSkip::*;
+
+impl Default for WhenToSkip {
+    fn default() -> Self {
+        Never
+    }
+}
+
+impl PartialEq for WhenToSkip {
+    fn eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl std::ops::BitOrAssign for WhenToSkip {
+    fn bitor_assign(&mut self, rhs: Self) {
+        match self {
+            Forced => (),
+            Always(_) => {
+                if rhs == Forced {
+                    *self = Forced;
+                }
+            }
+            Never => *self = rhs,
+        }
+    }
+}
+
+impl WhenToSkip {
     fn is_skipped(&self) -> bool {
-        self.0.is_some()
+        *self != Never
     }
 
-    fn check_for_conflicts(self, other: Self, ty: &syn::Type) -> Result<(), Error> {
-        if let Some(span) = self.0.xor(other.0) {
+    fn check_for_conflicts(&mut self, other: Self, ty: &syn::Type) -> Result<(), Error> {
+        if *self != other && let (Always(span), _) | (_, Always(span)) = (*self, other) {
             Err(Error::new(
                 span,
                 format!(
@@ -144,20 +184,23 @@ impl Skipped {
                 ),
             ))
         } else {
+            *self |= other;
             Ok(())
         }
     }
 
     fn find<const IS_TYPE: bool>(&mut self, attrs: &[Attribute], ty: Type) -> Result<(), Error> {
+        fn parse_reason(meta: &ParseNestedMeta<'_>) -> Result<(), Error> {
+            if !meta.value()?.parse::<LitStr>()?.value().trim().is_empty() {
+                Ok(())
+            } else {
+                Err(meta.error("skip reason must be a non-empty string"))
+            }
+        }
+
         let mut found = None;
         for attr in attrs {
             if attr.path().is_ident("skip_traversal") {
-                if IS_TYPE && ty != Trivial {
-                    return Err(Error::new_spanned(
-                        attr,
-                        "potentially non-trivial types cannot be skipped",
-                    ));
-                }
                 if !IS_TYPE && ty == Trivial {
                     return Err(Error::new_spanned(
                         attr,
@@ -167,14 +210,10 @@ impl Skipped {
 
                 attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("but_impl_despite_trivial_because") {
-                        return if IS_TYPE {
-                            debug_assert_eq!(ty, Trivial);
-                            if !meta.value()?.parse::<LitStr>()?.value().trim().is_empty() {
-                                self.0 = Some(meta.error("").span());
-                                Ok(())
-                            } else {
-                                Err(meta.error("skip reason must be a non-empty string"))
-                            }
+                        return if IS_TYPE && ty == Trivial {
+                            parse_reason(&meta)?;
+                            *self |= Always(meta.error("").span());
+                            Ok(())
                         } else {
                             Err(meta.error("`but_impl_despite_trivial_because` is only valid on guaranteed trivial types"))
                         };
@@ -183,12 +222,20 @@ impl Skipped {
                     if meta.path.is_ident("because_trivial") {
                         return if !IS_TYPE {
                             debug_assert_ne!(ty, Trivial);
-                            self.0 = Some(meta.error("").span());
+                            *self |= Always(meta.error("").span());
                             Ok(())
                         } else {
                             Err(meta
                                 .error("`because_trivial` is only valid on potentially non-trivial variants or fields"))
                         };
+                    }
+
+                    if meta.path.is_ident("despite_potential_miscompilation_because") {
+                        parse_reason(&meta)?;
+                        if ty != Trivial {
+                            *self |= Forced;
+                            return Ok(());
+                        }
                     }
 
                     Err(meta.error("unsupported skip reason"))
@@ -208,11 +255,22 @@ impl Skipped {
                 otherwise add `#[skip_traversal(but_impl_despite_trivial_because = \"<reason for implementation>\")]` to this type.\
             ",
             ))
-        } else if !IS_TYPE && let Some(attr) = found {
-            Err(Error::new_spanned(attr, "\
-                Potentially non-trivial fields can only be skipped if they are in fact trivial (i.e. they implement `TriviallyTraversable`),\n\
-                which is indicated by specifying `because_trivial`.\
-            "))
+        } else if let Some(attr) = found {
+            Err(Error::new_spanned(
+                attr,
+                if IS_TYPE {
+                    "\
+                    Justification must be provided for skipping potentially non-trivial types, by specifying\n\
+                    `despite_potential_miscompilation_because = \"<reason>\"`\
+                "
+                } else {
+                    "\
+                    Justification must be provided for skipping potentially non-trivial fields, by specifying EITHER:\n\
+                    `because_trivial` if concrete instances are in fact trivial (enforced by requiring the type to implement `TriviallyTraversable`); OR\n\
+                    `despite_potential_miscompilation_because = \"<reason>\"` in the rare case that a field should always be skipped regardless\
+                "
+                },
+            ))
         } else {
             Ok(())
         }
@@ -446,20 +504,20 @@ pub fn traversable_derive<T: Traversable>(
         not_generic
     };
 
-    let mut skipped_item = Skipped::default();
-    skipped_item.find::<true>(&ast.attrs, ty)?;
-    let body = if skipped_item.is_skipped() {
+    let mut when_to_skip = WhenToSkip::default();
+    when_to_skip.find::<true>(&ast.attrs, ty)?;
+    let body = if when_to_skip.is_skipped() {
         T::traverse(quote! { self }, true)
     } else {
         // We add predicates to each generic field type, rather than to our generic type parameters.
         // This results in a "perfect derive" that avoids having to propagate `#[skip_traversal]` annotations
         // into wrapping types, but it can result in trait solver cycles if any type parameters are involved
         // in recursive type definitions; fortunately that is not the case (yet).
-        let mut predicates = HashMap::<_, (Skipped, _)>::new();
+        let mut predicates = HashMap::<_, (WhenToSkip, _)>::new();
         let arms = structure.each_variant(|variant| {
             let variant_ty =
                 interner.type_of(&variant.referenced_ty_params(), variant.ast().fields);
-            let mut skipped_variant = Skipped::default();
+            let mut skipped_variant = WhenToSkip::default();
             if let Err(error) = skipped_variant.find::<false>(variant.ast().attrs, variant_ty) {
                 return error.into_compile_error();
             }
@@ -472,7 +530,7 @@ pub fn traversable_derive<T: Traversable>(
                 let is_skipped = field_ty == Trivial || {
                     match predicates.entry(ast.ty.clone()) {
                         Entry::Occupied(existing) => {
-                            existing.get().0.check_for_conflicts(skipped_field, &ast.ty)?
+                            existing.into_mut().0.check_for_conflicts(skipped_field, &ast.ty)?
                         }
                         Entry::Vacant(slot) => {
                             slot.insert((skipped_field, field_ty));
@@ -486,14 +544,12 @@ pub fn traversable_derive<T: Traversable>(
         });
         // the order in which `where` predicates appear in rust source is irrelevant
         #[allow(rustc::potential_query_instability)]
-        for (ty, (skipped, field_ty)) in predicates {
-            let constraint = if skipped.is_skipped() {
-                &trivial
-            } else if field_ty == Generic {
+        for (ty, (when_to_skip, field_ty)) in predicates {
+            let constraint = match when_to_skip {
+                Always(_) => &trivial,
                 // we only need to add traversable predicate for generic types
-                &traversable
-            } else {
-                continue;
+                Never if field_ty == Generic => &traversable,
+                _ => continue,
             };
             structure.add_where_predicate(parse_quote! { #ty: #constraint });
         }
