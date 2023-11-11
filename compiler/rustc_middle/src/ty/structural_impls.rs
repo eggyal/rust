@@ -417,15 +417,6 @@ TrivialLiftImpls! {
      rustc_target::abi::Size,
 }
 
-// For some things about which the type library does not know, or does not
-// provide any traversal implementations, we need to provide a traversal
-// implementation (only for TyCtxt<'_> interners).
-TrivialTypeTraversalImpls! {
-    for<'tcx> {
-        ty::ValTree<'tcx>,
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////
 // Lift implementations
 
@@ -454,15 +445,6 @@ impl<'a, 'tcx> Lift<'tcx> for Term<'a> {
 
 ///////////////////////////////////////////////////////////////////////////
 // Traversal implementations.
-
-impl<'tcx> TypeVisitable<TyCtxt<'tcx>> for ty::AdtDef<'tcx> {
-    fn visit_with<V: TypeVisitor<TyCtxt<'tcx>>>(
-        &self,
-        _visitor: &mut V,
-    ) -> ControlFlow<V::BreakTy> {
-        ControlFlow::Continue(())
-    }
-}
 
 impl<'tcx, T: TypeFoldable<TyCtxt<'tcx>>> TypeFoldable<TyCtxt<'tcx>> for ty::Binder<'tcx, T> {
     fn try_fold_with<F: FallibleTypeFolder<TyCtxt<'tcx>>>(

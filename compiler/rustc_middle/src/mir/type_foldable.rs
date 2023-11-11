@@ -5,13 +5,6 @@ use rustc_ast::InlineAsmTemplatePiece;
 use super::*;
 use crate::ty;
 
-TrivialTypeTraversalImpls! {
-    for<'tcx> {
-        ConstValue<'tcx>,
-        NullOp<'tcx>,
-    }
-}
-
 impl<'tcx> TypeFoldable<TyCtxt<'tcx>> for &'tcx [InlineAsmTemplatePiece] {
     fn try_fold_with<F: FallibleTypeFolder<TyCtxt<'tcx>>>(
         self,

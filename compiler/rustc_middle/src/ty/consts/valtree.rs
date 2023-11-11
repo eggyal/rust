@@ -4,7 +4,7 @@ use crate::ty::{self, Ty, TyCtxt};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
 
 #[derive(Copy, Clone, Debug, Hash, TyEncodable, TyDecodable, Eq, PartialEq, Ord, PartialOrd)]
-#[derive(HashStable)]
+#[derive(HashStable, TypeFoldable, TypeVisitable)]
 /// This datastructure is used to represent the value of constants used in the type system.
 ///
 /// We explicitly choose a different datastructure from the way values are processed within
@@ -32,7 +32,7 @@ pub enum ValTree<'tcx> {
     /// the fields of the variant.
     ///
     /// ZST types are represented as an empty slice.
-    Branch(&'tcx [ValTree<'tcx>]),
+    Branch(#[skip_traversal(because_trivial)] &'tcx [ValTree<'tcx>]),
 }
 
 impl<'tcx> ValTree<'tcx> {

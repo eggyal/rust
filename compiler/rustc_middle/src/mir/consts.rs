@@ -30,7 +30,7 @@ pub struct ConstAlloc<'tcx> {
 /// Represents a constant value in Rust. `Scalar` and `Slice` are optimizations for
 /// array length computations, enum discriminants and the pattern matching logic.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TyEncodable, TyDecodable, Hash)]
-#[derive(HashStable, Lift)]
+#[derive(HashStable, Lift, TypeFoldable, TypeVisitable)]
 pub enum ConstValue<'tcx> {
     /// Used for types with `layout::abi::Scalar` ABI.
     ///

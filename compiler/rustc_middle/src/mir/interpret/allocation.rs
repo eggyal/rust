@@ -141,9 +141,9 @@ impl hash::Hash for Allocation {
 /// Here things are different because only const allocations are interned. This
 /// means that both the inner type (`Allocation`) and the outer type
 /// (`ConstAllocation`) are used quite a bit.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, HashStable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, HashStable, TypeFoldable, TypeVisitable)]
 #[rustc_pass_by_value]
-pub struct ConstAllocation<'tcx>(pub Interned<'tcx, Allocation>);
+pub struct ConstAllocation<'tcx>(#[skip_traversal(because_trivial)] pub Interned<'tcx, Allocation>);
 
 impl<'tcx> fmt::Debug for ConstAllocation<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
