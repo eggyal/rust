@@ -658,8 +658,9 @@ impl<T> MaybeUninit<T> {
     ///
     /// It is up to the caller to guarantee that the `MaybeUninit<T>` really is in an initialized
     /// state. Calling this when the content is not yet fully initialized causes immediate undefined
-    /// behavior. The [type-level documentation][inv] contains more information about
-    /// this initialization invariant.
+    /// behavior - even for types that can hold any fixed bit pattern, such as integers. The
+    /// [type-level documentation][inv] contains more information about this initialization
+    /// invariant.
     ///
     /// [inv]: #initialization-invariant
     ///
@@ -721,8 +722,9 @@ impl<T> MaybeUninit<T> {
     ///
     /// It is up to the caller to guarantee that the `MaybeUninit<T>` really is in an initialized
     /// state. Calling this when the content is not yet fully initialized causes undefined
-    /// behavior. The [type-level documentation][inv] contains more information about
-    /// this initialization invariant.
+    /// behavior - even for types that can hold any fixed bit pattern, such as integers. The
+    /// [type-level documentation][inv] contains more information about this initialization
+    /// invariant.
     ///
     /// Moreover, similar to the [`ptr::read`] function, this function creates a
     /// bitwise copy of the contents, regardless whether the contained type
@@ -790,7 +792,8 @@ impl<T> MaybeUninit<T> {
     ///
     /// It is up to the caller to guarantee that the `MaybeUninit<T>` really is
     /// in an initialized state. Calling this when the content is not yet fully
-    /// initialized causes undefined behavior.
+    /// initialized causes undefined behavior - even for types that can hold any fixed bit pattern,
+    /// such as integers.
     ///
     /// On top of that, all additional invariants of the type `T` must be
     /// satisfied, as the `Drop` implementation of `T` (or its members) may
@@ -823,8 +826,8 @@ impl<T> MaybeUninit<T> {
     /// # Safety
     ///
     /// Calling this when the content is not yet fully initialized causes undefined
-    /// behavior: it is up to the caller to guarantee that the `MaybeUninit<T>` really
-    /// is in an initialized state.
+    /// behavior - even for types that can hold any fixed bit pattern, such as integers: it is up to
+    /// the caller to guarantee that the `MaybeUninit<T>` really is in an initialized state.
     ///
     /// # Examples
     ///
@@ -890,9 +893,9 @@ impl<T> MaybeUninit<T> {
     /// # Safety
     ///
     /// Calling this when the content is not yet fully initialized causes undefined
-    /// behavior: it is up to the caller to guarantee that the `MaybeUninit<T>` really
-    /// is in an initialized state. For instance, `.assume_init_mut()` cannot be used to
-    /// initialize a `MaybeUninit`.
+    /// behavior - even for types that can hold any fixed bit pattern, such as integers: it is up to
+    /// the caller to guarantee that the `MaybeUninit<T>` really is in an initialized state. For
+    /// instance, `.assume_init_mut()` cannot be used to initialize a `MaybeUninit`.
     ///
     /// # Examples
     ///
@@ -1451,8 +1454,9 @@ impl<T> [MaybeUninit<T>] {
     /// # Safety
     ///
     /// It is up to the caller to guarantee that every `MaybeUninit<T>` in the slice
-    /// really is in an initialized state. Calling this when the content is not yet
-    /// fully initialized causes undefined behavior.
+    /// really is in an initialized state - even for types that can hold any fixed bit pattern, such
+    /// as integers. Calling this when the content is not yet fully initialized causes undefined
+    /// behavior.
     ///
     /// On top of that, all additional invariants of the type `T` must be
     /// satisfied, as the `Drop` implementation of `T` (or its members) may
@@ -1482,8 +1486,9 @@ impl<T> [MaybeUninit<T>] {
     /// # Safety
     ///
     /// Calling this when the content is not yet fully initialized causes undefined
-    /// behavior: it is up to the caller to guarantee that every `MaybeUninit<T>` in
-    /// the slice really is in an initialized state.
+    /// behavior - even for types that can hold any fixed bit pattern, such as integers: it is up to
+    /// the caller to guarantee that every `MaybeUninit<T>` in the slice really is in an initialized
+    /// state.
     #[stable(feature = "maybe_uninit_slice", since = "1.93.0")]
     #[rustc_const_stable(feature = "maybe_uninit_slice", since = "1.93.0")]
     #[inline(always)]
@@ -1500,9 +1505,10 @@ impl<T> [MaybeUninit<T>] {
     /// # Safety
     ///
     /// Calling this when the content is not yet fully initialized causes undefined
-    /// behavior: it is up to the caller to guarantee that every `MaybeUninit<T>` in the
-    /// slice really is in an initialized state. For instance, `.assume_init_mut()` cannot
-    /// be used to initialize a `MaybeUninit` slice.
+    /// behavior - even for types that can hold any fixed bit pattern, such as integers: it is up to
+    /// the caller to guarantee that every `MaybeUninit<T>` in the slice really is in an initialized
+    /// state. For instance, `.assume_init_mut()` cannot be used to initialize a `MaybeUninit`
+    /// slice.
     #[stable(feature = "maybe_uninit_slice", since = "1.93.0")]
     #[rustc_const_stable(feature = "maybe_uninit_slice", since = "1.93.0")]
     #[inline(always)]
