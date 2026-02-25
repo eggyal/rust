@@ -2892,13 +2892,13 @@ impl AsmMacro {
 #[derive(Clone, Encodable, Decodable, Debug, Walkable)]
 pub struct InlineAsm {
     pub asm_macro: AsmMacro,
-    pub template: Vec<InlineAsmTemplatePiece>,
+    pub template: Box<[InlineAsmTemplatePiece]>,
     pub template_strs: Box<[(Symbol, Option<Symbol>, Span)]>,
-    pub operands: Vec<(InlineAsmOperand, Span)>,
-    pub clobber_abis: Vec<(Symbol, Span)>,
+    pub operands: Box<[(InlineAsmOperand, Span)]>,
+    pub clobber_abis: Box<[(Symbol, Span)]>,
     #[visitable(ignore)]
     pub options: InlineAsmOptions,
-    pub line_spans: Vec<Span>,
+    pub line_spans: Box<[Span]>,
 }
 
 /// A parameter in a function header.

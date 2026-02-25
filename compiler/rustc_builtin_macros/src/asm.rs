@@ -569,12 +569,12 @@ fn expand_preparsed_asm(
 
     ExpandResult::Ready(Ok(ast::InlineAsm {
         asm_macro,
-        template,
+        template: template.into_boxed_slice(),
         template_strs: template_strs.into_boxed_slice(),
-        operands: args.operands,
-        clobber_abis: args.clobber_abis,
+        operands: args.operands.into_boxed_slice(),
+        clobber_abis: args.clobber_abis.into_boxed_slice(),
         options: args.options,
-        line_spans,
+        line_spans: line_spans.into_boxed_slice(),
     }))
 }
 
