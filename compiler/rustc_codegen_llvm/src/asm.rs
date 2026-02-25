@@ -376,10 +376,12 @@ impl<'ll, 'tcx> AsmBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
 impl<'tcx> AsmCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
     fn codegen_global_asm(
         &mut self,
+        preamble: &str,
         template: &[InlineAsmTemplatePiece],
+        epilogue: &str,
         operands: &[GlobalAsmOperandRef<'tcx>],
         options: InlineAsmOptions,
-        _line_spans: &[Span],
+        line_spans: &[Span],
     ) {
         let asm_arch = self.tcx.sess.asm_arch.unwrap();
 
@@ -396,9 +398,37 @@ impl<'tcx> AsmCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
             }
         }
 
-        for piece in template {
+        template_str.push_str(preamble);
+
+        let mut line_spans = line_spans.iter().copied();
+        for (piece_idx, piece) in template.iter().enumerate() {
             match *piece {
-                InlineAsmTemplatePiece::String(ref s) => template_str.push_str(s),
+                InlineAsmTemplatePiece::String(ref s) => {
+                    if let Some(dcx) = &self.dbg_cx {
+                        let mut emit_loc = |out: &mut String, discard| {
+                            let span = line_spans
+                                .next()
+                                .expect("line_spans should align to asm template lines");
+                            if !discard {
+                                self.asm_loc_directive(dcx, span, out)
+                            }
+                        };
+
+                        if piece_idx == 0 {
+                            emit_loc(&mut template_str, false);
+                        }
+
+                        for line_part in s.split_inclusive('\n') {
+                            template_str.push_str(line_part);
+                            if line_part.ends_with('\n') {
+                                let discard = line_part.trim_ascii_end().ends_with('\\');
+                                emit_loc(&mut template_str, discard);
+                            }
+                        }
+                    } else {
+                        template_str.push_str(s);
+                    }
+                }
                 InlineAsmTemplatePiece::Placeholder { operand_idx, modifier: _, span } => {
                     use rustc_codegen_ssa::back::symbol_export::escape_symbol_name;
                     match operands[operand_idx] {
@@ -435,6 +465,13 @@ impl<'tcx> AsmCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
                 }
             }
         }
+
+        debug_assert!(
+            self.dbg_cx.is_none() || line_spans.next().is_none(),
+            "line_spans should align to asm template lines"
+        );
+
+        template_str.push_str(epilogue);
 
         // Just to play it safe, if intel was used, reset the assembly syntax to att.
         if matches!(asm_arch, InlineAsmArch::X86 | InlineAsmArch::X86_64)

@@ -25,12 +25,22 @@ pub(crate) struct GlobalAsmContext<'a, 'tcx> {
 impl<'tcx> AsmCodegenMethods<'tcx> for GlobalAsmContext<'_, 'tcx> {
     fn codegen_global_asm(
         &mut self,
+        preamble: &str,
         template: &[InlineAsmTemplatePiece],
+        epilogue: &str,
         operands: &[GlobalAsmOperandRef<'tcx>],
         options: InlineAsmOptions,
         _line_spans: &[Span],
     ) {
-        codegen_global_asm_inner(self.tcx, self.global_asm, template, operands, options);
+        codegen_global_asm_inner(
+            self.tcx,
+            self.global_asm,
+            preamble,
+            template,
+            epilogue,
+            operands,
+            options,
+        );
     }
 
     fn mangled_name(&self, instance: Instance<'tcx>) -> String {
@@ -89,7 +99,9 @@ impl<'tcx> HasTypingEnv<'tcx> for GlobalAsmContext<'_, 'tcx> {
 fn codegen_global_asm_inner<'tcx>(
     tcx: TyCtxt<'tcx>,
     global_asm: &mut String,
+    preamble: &str,
     template: &[InlineAsmTemplatePiece],
+    epilogue: &str,
     operands: &[GlobalAsmOperandRef<'tcx>],
     options: InlineAsmOptions,
 ) {
@@ -102,6 +114,7 @@ fn codegen_global_asm_inner<'tcx>(
             global_asm.push_str("\n.att_syntax\n");
         }
     }
+    global_asm.push_str(preamble);
     for piece in template {
         match *piece {
             InlineAsmTemplatePiece::String(ref s) => global_asm.push_str(s),
@@ -140,6 +153,7 @@ fn codegen_global_asm_inner<'tcx>(
             }
         }
     }
+    global_asm.push(epilogue);
 
     global_asm.push('\n');
     if is_x86 {

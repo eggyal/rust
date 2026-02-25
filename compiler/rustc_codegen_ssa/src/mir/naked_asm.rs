@@ -48,12 +48,7 @@ pub fn codegen_naked_asm<
     let fn_abi = cx.fn_abi_of_instance(instance, ty::List::empty());
     let (begin, end) = prefix_and_suffix(cx.tcx(), instance, &name, item_data, fn_abi);
 
-    let mut template_vec = Vec::new();
-    template_vec.push(rustc_ast::ast::InlineAsmTemplatePiece::String(begin.into()));
-    template_vec.extend(template.iter().cloned());
-    template_vec.push(rustc_ast::ast::InlineAsmTemplatePiece::String(end.into()));
-
-    cx.codegen_global_asm(&template_vec, &operands, options, line_spans);
+    cx.codegen_global_asm(&begin, template, &end, &operands, options, line_spans);
 }
 
 fn inline_to_global_operand<'a, 'tcx, Cx: LayoutOf<'tcx, LayoutOfResult = TyAndLayout<'tcx>>>(

@@ -63,7 +63,9 @@ pub trait AsmBuilderMethods<'tcx>: BackendTypes {
 pub trait AsmCodegenMethods<'tcx> {
     fn codegen_global_asm(
         &mut self,
+        preamble: &str,
         template: &[InlineAsmTemplatePiece],
+        epilogue: &str,
         operands: &[GlobalAsmOperandRef<'tcx>],
         options: InlineAsmOptions,
         line_spans: &[Span],

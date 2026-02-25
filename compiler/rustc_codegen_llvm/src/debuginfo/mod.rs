@@ -58,6 +58,7 @@ pub(crate) struct CodegenUnitDebugContext<'ll, 'tcx> {
     llmod: &'ll llvm::Module,
     builder: DIBuilderBox<'ll>,
     created_files: RefCell<UnordMap<Option<(StableSourceFileId, SourceFileHash)>, &'ll DIFile>>,
+    asm_file_ids: RefCell<UnordMap<(StableSourceFileId, SourceFileHash), usize>>,
 
     type_map: metadata::TypeMap<'ll, 'tcx>,
     adt_stack: RefCell<Vec<(DefId, GenericArgsRef<'tcx>)>>,
@@ -74,6 +75,7 @@ impl<'ll, 'tcx> CodegenUnitDebugContext<'ll, 'tcx> {
             llmod,
             builder,
             created_files: Default::default(),
+            asm_file_ids: Default::default(),
             type_map: Default::default(),
             adt_stack: Default::default(),
             namespace_map: RefCell::new(Default::default()),
@@ -378,6 +380,27 @@ impl<'ll> CodegenCx<'ll, '_> {
         } else {
             DebugLoc { file, line, col }
         }
+    }
+
+    pub(crate) fn asm_loc_directive(
+        &self,
+        dcx: &CodegenUnitDebugContext<'_, '_>,
+        span: Span,
+        mut out: impl std::fmt::Write,
+    ) {
+        let loc = self.lookup_debug_loc(span.lo());
+
+        let mut asm_file_ids = dcx.asm_file_ids.borrow_mut();
+        let next_id = asm_file_ids.len() + 1;
+        let file_id =
+            *asm_file_ids.entry((loc.file.stable_id, loc.file.src_hash)).or_insert_with(|| {
+                let file_name =
+                    loc.file.name.display(rustc_span::RemapPathScopeComponents::DEBUGINFO);
+                writeln!(out, ".file {next_id} \"{file_name}\"").unwrap();
+                next_id
+            });
+
+        writeln!(out, ".loc {file_id} {} {}", loc.line, loc.col).unwrap();
     }
 
     fn create_template_type_parameter(

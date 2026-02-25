@@ -856,7 +856,9 @@ fn dummy_output_type<'gcc, 'tcx>(cx: &CodegenCx<'gcc, 'tcx>, reg: InlineAsmRegCl
 impl<'gcc, 'tcx> AsmCodegenMethods<'tcx> for CodegenCx<'gcc, 'tcx> {
     fn codegen_global_asm(
         &mut self,
+        preamble: &str,
         template: &[InlineAsmTemplatePiece],
+        epilogue: &str,
         operands: &[GlobalAsmOperandRef<'tcx>],
         options: InlineAsmOptions,
         _line_spans: &[Span],
@@ -872,6 +874,7 @@ impl<'gcc, 'tcx> AsmCodegenMethods<'tcx> for CodegenCx<'gcc, 'tcx> {
         if att_dialect {
             template_str.push_str(".att_syntax\n");
         }
+        template_str.push_str(preamble);
         for piece in template {
             match *piece {
                 InlineAsmTemplatePiece::String(ref string) => {
@@ -920,6 +923,7 @@ impl<'gcc, 'tcx> AsmCodegenMethods<'tcx> for CodegenCx<'gcc, 'tcx> {
                 }
             }
         }
+        template_str.push_str(epilogue);
 
         if att_dialect {
             template_str.push_str("\n\t.intel_syntax noprefix");
